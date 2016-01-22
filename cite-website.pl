@@ -22,7 +22,7 @@ my $htmldoc = LWP::Simple::get($ARGV[0]);
 die "Could not get $ARGV[0]. $@" unless defined $htmldoc;
 
 my $og = Data::OpenGraph->parse_string($htmldoc);
-#print STDERR "og: ", Dumper($og), "\n";
+print STDERR "og: ", Dumper($og), "\n";
 
 
 my %entry = ();
@@ -36,74 +36,21 @@ sub test {
             || length ($x));
 }
 
-my $title = $og->property('title');
-if (test $title) {
-    $entry{'title'} = $title;
-}
 
-my $og_type = $og->property('_basictype');
-if (test $og_type) {
-    my $type;
-    switch ($og_type) {
-        case "article" { $type = "article"; }
-        case "book" { $type = "book"; }
-        case "website" { $type = "website"; }
-        else { $type = "website"; }
-    }
-    $entry{'type'} = $type;
-}
-
-my $url = $og->property('url');
-if (test $url) {
-    $entry{'URL'} = $url;
-}
-else {
-    $entry{'URL'} = $ARGV[0];
-}
-
-my $id = undef;
-my @creators = ();
-print STDERR "og: ", Dumper($og), "\n";
-if (test $og->property("$og_type:author")) {
-    if (ref $og->property("$og_type:author") ne ''
-        && reftype($og->property("$og_type:author")) eq 'ARRAY') {
-        @creators = @{$og->property("$og_type:author")};
-    }
-    else {
-        @creators[0] = $og->property("$og_type:author");
-    }
-}
-#print STDERR "creators: ", Dumper(\@creators), "\n";
-if (scalar @creators) {
-    foreach my $creator (@creators) {
-        #print STDERR "creator: >$creator<\n";
-        my $creator_text = $creator;
-        my $author = {};
-        if ($creator_text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
-            my $family = $1;
-            my $given = $2;
-            $author->{'family'} = $family;
-            $author->{'given'} = $given;
-        }
-        elsif ($creator_text =~ /^\s*(\S+\s+|\S+)+\s+(\S+)\s*$/) {
-            my $family = $2;
-            my $given = $1;
-            $author->{'family'} = $family;
-            $author->{'given'} = $given;
+sub read_og_array {
+    my ($og, $prop) = @_;
+    my $prop_value = $og->property($prop);
+    my @arr;
+    if (test $prop_value) {
+        if (ref $prop_value ne ''
+            && reftype($prop_value) eq 'ARRAY') {
+            @arr = @{$prop_value};
         }
         else {
-            $author->{'family'} = $creator_text;
+            @arr = ();
+            @arr[0] = $prop_value;
         }
-
-        if (! $id) {
-            $id = $author->{'family'};
-            $id =~ s/\W//g;
-            $id = lc $id;
-        }
-
-        push @{$entry{'author'}}, $author;
     }
-    $entry{'id'} = $id;
 }
 
 
@@ -125,23 +72,18 @@ sub date_conversion {
     }
 }
 
-my $og_issued_date_str;
-switch ($og_type) {
-    case "article" {
-        $og_issued_date_str = $og->property("$og_type:published_time"); }
-    case "book" {
-        $og_issued_date_str = $og->property("$og_type:release_date"); }
+
+my $title = $og->property('title');
+if (test $title) {
+    $entry{'title'} = $title;
 }
-#print STDERR "published time: ", $og_issued_date_str // "(undef)", "\n";
-if (test $og_issued_date_str) {
-    my $date = DateTime::Format::ISO8601->parse_datetime($og_issued_date_str);
-    my $year = $date->year;
 
-    $entry{'issued'} = date_conversion $date;
-
-    if (exists $entry{'id'} && $year) {
-        $entry{'id'} .= $year;
-    }
+my $url = $og->property('url');
+if (test $url) {
+    $entry{'URL'} = $url;
+}
+else {
+    $entry{'URL'} = $ARGV[0];
 }
 
 my $publisher = $og->property('site_name');
@@ -149,26 +91,92 @@ if (test $publisher) {
     $entry{'publisher'} = $publisher;
 }
 
-if ($og_type eq 'book'
-    && test $og->property("$og_type:isbn")) {
-    $entry{'ISBN'} = $og->property("$og_type:isbn");
+my $og_type = $og->property('_basictype');
+if (test $og_type) {
+    my $type;
+    switch ($og_type) {
+        case "article" { $type = "article"; }
+        case "book" { $type = "book"; }
+        case "website" { $type = "website"; }
+        else { $type = "website"; }
+    }
+    $entry{'type'} = $type;
+}
+else {
+    Carp::carp("og:type attribute is missing.");
 }
 
-my @og_tags = ();
-#print STDERR "tags: ", Dumper($og->property("$og_type:tag")), "\n";
-if (test $og->property("$og_type:tag")) {
-    if (ref $og->property("$og_type:tag") ne ''
-        && reftype($og->property("$og_type:tag")) eq 'ARRAY') {
-        @og_tags = @{$og->property("$og_type:tag")};
+my $id = undef;
+
+if ($og_type) {
+    my @creators = read_og_array ("$og_type:author");
+    #print STDERR "creators: ", Dumper(\@creators), "\n";
+    if (scalar @creators) {
+        foreach my $creator (@creators) {
+            #print STDERR "creator: >$creator<\n";
+            my $creator_text = $creator;
+            my $author = {};
+            if ($creator_text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
+                my $family = $1;
+                my $given = $2;
+                $author->{'family'} = $family;
+                $author->{'given'} = $given;
+            }
+            elsif ($creator_text =~ /^\s*(\S+\s+|\S+)+\s+(\S+)\s*$/) {
+                my $family = $2;
+                my $given = $1;
+                $author->{'family'} = $family;
+                $author->{'given'} = $given;
+            }
+            else {
+                $author->{'family'} = $creator_text;
+            }
+
+            if (! $id) {
+                $id = $author->{'family'};
+                $id =~ s/\W//g;
+                $id = lc $id;
+            }
+
+            push @{$entry{'author'}}, $author;
+        }
+        $entry{'id'} = $id;
     }
-    else {
-        @og_tags[0] = $og->property("$og_type:tag");
+
+    my $og_issued_date_str;
+
+    switch ($og_type) {
+        case "article" {
+            $og_issued_date_str = $og->property("$og_type:published_time"); }
+        case "book" {
+            $og_issued_date_str = $og->property("$og_type:release_date"); }
     }
-}
-#print STDERR "tags: ", Dumper(\@og_tags), "\n";
-if (scalar @og_tags) {
-    $entry{'keyword'} = join ", ", @og_tags;
-}
+
+    #print STDERR "published time: ", $og_issued_date_str // "(undef)", "\n";
+    if (test $og_issued_date_str) {
+        my $date = DateTime::Format::ISO8601->parse_datetime($og_issued_date_str);
+        my $year = $date->year;
+
+        $entry{'issued'} = date_conversion $date;
+
+        if (exists $entry{'id'} && $year) {
+            $entry{'id'} .= $year;
+        }
+    }
+
+    if ($og_type eq 'book'
+        && test $og->property("$og_type:isbn")) {
+        $entry{'ISBN'} = $og->property("$og_type:isbn");
+    }
+
+    my @og_tags = read_og_array ($og, "$og_type:tag");
+    #print STDERR "tags: ", Dumper($og->property("$og_type:tag")), "\n";
+    #print STDERR "tags: ", Dumper(\@og_tags), "\n";
+    if (scalar @og_tags) {
+        $entry{'keyword'} = join ", ", @og_tags;
+    }
+
+} # $og_type
 
 $entry{'accessed'} = date_conversion(DateTime->today());
 
