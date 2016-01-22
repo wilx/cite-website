@@ -14,6 +14,7 @@ use Scalar::Util qw(reftype);
 
 use Carp;
 local $SIG{__WARN__} = sub { print( Carp::longmess (shift) ); };
+#local $SIG{__DIE__} = sub { print( Carp::longmess (shift) ); };
 
 STDOUT->binmode(":utf8");
 STDERR->binmode(":utf8");
@@ -51,6 +52,7 @@ sub read_og_array {
             @arr[0] = $prop_value;
         }
     }
+    return @arr;
 }
 
 
@@ -109,7 +111,7 @@ else {
 my $id = undef;
 
 if ($og_type) {
-    my @creators = read_og_array ("$og_type:author");
+    my @creators = read_og_array ($og, "$og_type:author");
     #print STDERR "creators: ", Dumper(\@creators), "\n";
     if (scalar @creators) {
         foreach my $creator (@creators) {
