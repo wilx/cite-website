@@ -91,7 +91,7 @@ sub parse_author {
         $author->{'family'} = $family;
         $author->{'given'} = $given;
     }
-    elsif ($text =~ /^\s*(\S+\s+|\S+)+\s+(\S+)\s*$/) {
+    elsif ($text =~ /^\s*((?:\S+\s+|\S+)+)\s+(\S+)\s*$/) {
         my $family = $2;
         my $given = $1;
         $author->{'family'} = $family;
@@ -237,6 +237,24 @@ if (! exists $entry{'issued'}
 
     my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
     $entry{'issued'} = date_conversion $date;
+}
+
+my $html_meta_date_str = $html_headers->header('X-Meta-Created');
+if (! exists $entry{'issued'}
+    && test($html_meta_date_str)) {
+    #print STDERR "date: >", $html_meta_date_str, "<\n";
+
+    my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
+    $entry{'issued'} = date_conversion $date;
+}
+
+my $html_meta_keywords = $html_headers->header('X-Meta-Keywords');
+if (! exists $entry{'keyword'}
+    && test($html_meta_keywords)) {
+    $html_meta_keywords =~ s/(\s)\s*/$1/g;
+    $html_meta_keywords =~ s/^\s+//g;
+    $html_meta_keywords =~ s/\s+$//g;
+    $entry{'keyword'} = $html_meta_keywords;
 }
 
 $entry{'accessed'} = date_conversion(DateTime->today());
