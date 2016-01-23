@@ -8,6 +8,8 @@ use Data::Dumper;
 use LWP::Simple qw();
 use Data::OpenGraph;
 use HTML::HTML5::Microdata::Parser;
+use HTML::Microdata;
+use URI;
 use RDF::Query;
 use YAML qw();
 use DateTime::Format::ISO8601;
@@ -15,6 +17,7 @@ use DateTime::Format::W3CDTF;
 use DateTime::Format::HTTP;
 use IO::Handle;
 use Scalar::Util qw(reftype);
+use Data::DPath 'dpath';
 
 use Carp;
 local $SIG{__WARN__} = sub { print( Carp::longmess (shift) ); };
@@ -201,10 +204,47 @@ if ($og_type) {
 
 } # $og_type
 
+my $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
+my $items = $microdata->items;
+#print STDERR "microdata as JSON:\n", Dumper($items), "\n";
+my @md_authors = dpath('//author/*')->match($items);
+print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
+if (! test($entry{'author'})) {
+    if (test(\@md_authors)) {
+        foreach my $md_author (@md_authors) {
+            if (exists $md_author->{'type'}
+                && $md_author->{'type'} eq 'http://schema.org/Person') {
+                my @authors = dpath('/properties/name/*[0]')->match($md_author);
+                #print STDERR "author: ", Dumper(@authors), "\n";
+
+                my $author = parse_author($authors[0]);
+                if (! $id) {
+                    $id = $author->{'family'};
+                    $id =~ s/\W//g;
+                    $id = lc $id;
+                }
+                push @{$entry{'author'}}, $author;
+            }
+        }
+    }
+}
+
+if (0) {
 my $microdata = HTML::HTML5::Microdata::Parser->new (
-    $htmldoc, $ARGV[0]);
-    #{auto_config => 1, tdb_service => 1, xhtml_meta => 1, xhtml_rel => 1});
-#print STDERR "microdata->graph:\n", Dumper($microdata->graph), "\n";
+    $htmldoc, $ARGV[0],
+    {
+        alt_stylesheet => 1,
+        auto_config => 1,
+        mhe_lang => 1,
+        #tdb_service => 1,
+        xhtml_meta => 1,
+        xhtml_rel => 1,
+        xhtml_cite => 1,
+        xhtml_time => 1,
+        xhtml_title => 1,
+        xml_lang => 1
+    });
+print STDERR "microdata->graph:\n", Dumper($microdata->graph), "\n";
 
 my $query = RDF::Query->new(<<'SPARQL');
 PREFIX schema: <http://schema.org/>
@@ -218,6 +258,7 @@ my $people = $query->execute($microdata->graph);
 #print STDERR "authors from RDF:\n", Dumper($people), "\n";
 while (my $person = $people->next) {
     print STDERR "people: ", $person, "\n";
+}
 }
 
 my $html_headers = HTTP::Headers->new;
@@ -239,7 +280,7 @@ if (! exists $entry{'issued'}
     $entry{'issued'} = date_conversion $date;
 }
 
-my $html_meta_date_str = $html_headers->header('X-Meta-Created');
+$html_meta_date_str = $html_headers->header('X-Meta-Created');
 if (! exists $entry{'issued'}
     && test($html_meta_date_str)) {
     #print STDERR "date: >", $html_meta_date_str, "<\n";
