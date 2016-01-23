@@ -26,12 +26,19 @@ local $SIG{__WARN__} = sub { print( Carp::longmess (shift) ); };
 STDOUT->binmode(":utf8");
 STDERR->binmode(":utf8");
 
-my $htmldoc = LWP::Simple::get($ARGV[0]);
-die "Could not get $ARGV[0]. $@" unless defined $htmldoc;
+my $ua = LWP::UserAgent->new;
+$ua->timeout(30);
+$ua->agent('Mozilla/5.0');
+my $response = $ua->get($ARGV[0]);
+my $htmldoc;
+if ($response->is_success) {
+    $htmldoc = $response->decoded_content;
+}
+else {
+    die $response->status_line;
+}
 
 my $og = Data::OpenGraph->parse_string($htmldoc);
-print STDERR "og: ", Dumper($og), "\n";
-
 
 my %entry = ();
 
@@ -206,7 +213,8 @@ if ($og_type) {
 
 my $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
 my $items = $microdata->items;
-#print STDERR "microdata as JSON:\n", Dumper($items), "\n";
+print STDERR "microdata as JSON:\n", Dumper($items), "\n";
+
 my @md_authors = dpath('//author/*')->match($items);
 print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
 if (! test($entry{'author'})) {
@@ -225,8 +233,23 @@ if (! test($entry{'author'})) {
                 }
                 push @{$entry{'author'}}, $author;
             }
+            else {
+                print STDERR ("Found author but not type http://schema.org/Person:\n",
+                              Dumper($md_author), "\n");
+            }
         }
     }
+}
+
+my @md_articles = dpath('//*/[key eq "type" && (value eq "http://schema.org/Article" || value eq "http://schema.org/NewsArticle")]/..')->match($items);
+
+print STDERR "article entry:\n", Dumper(@md_articles), "\n";
+if (! test($entry{'issued'})
+    && test(\@md_articles)
+    && test($md_articles[0]{'properties'}{'datePublished'}[0])) {
+    my $date = DateTime::Format::ISO8601->parse_datetime(
+        $md_articles[0]{'properties'}{'datePublished'}[0]);
+    $entry{'issued'} = date_conversion($date);
 }
 
 if (0) {
