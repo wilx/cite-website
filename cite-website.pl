@@ -7,17 +7,19 @@ use Switch;
 use Data::Dumper;
 use LWP::Simple qw();
 use Data::OpenGraph;
-use HTML::HTML5::Microdata::Parser;
 use HTML::Microdata;
+use HTML::TreeBuilder::XPath;
 use URI;
 use RDF::Query;
 use YAML qw();
 use DateTime::Format::ISO8601;
 use DateTime::Format::W3CDTF;
 use DateTime::Format::HTTP;
+use DateTime::Format::CLDR;
 use IO::Handle;
 use Scalar::Util qw(reftype);
 use Data::DPath 'dpath';
+use TryCatch;
 
 use Carp;
 local $SIG{__WARN__} = sub { print( Carp::longmess (shift) ); };
@@ -28,6 +30,8 @@ STDERR->binmode(":utf8");
 
 my $ua = LWP::UserAgent->new;
 $ua->timeout(30);
+# Fake user agent identification is necessary. Some webs simply do not
+# respond if they think this is some kind of crawler they do not like.
 $ua->agent('Mozilla/5.0');
 my $response = $ua->get($ARGV[0]);
 my $htmldoc;
@@ -38,7 +42,46 @@ else {
     die $response->status_line;
 }
 
+# HTML headers parsing.
+
+my $html_headers = HTTP::Headers->new;
+my $headers_parser = HTML::HeadParser->new($html_headers);
+$headers_parser->parse($htmldoc);
+
+# Open Graph parsing.
+
 my $og = Data::OpenGraph->parse_string($htmldoc);
+#print STDERR "og:\n", Dumper($og->{properties}), "\n";
+
+# Microdata parsing.
+
+my $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
+my $items = $microdata->items;
+#print STDERR "microdata as JSON:\n", Dumper($items), "\n";
+
+# HTML as tree parsing.
+
+my $tree = HTML::TreeBuilder::XPath->new;
+$tree->parse($htmldoc);
+
+# Parse language out of meta headers.
+
+my $lang;
+{
+    my $keywords_lang = $tree->findvalue('//head/meta[@name="keywords"]/@lang');
+    #print STDERR "keywords_lang: ", Dumper($keywords_lang), "\n";
+
+    my $description_lang = $tree->findvalue('//head/meta[@name="description"]/@lang');
+    #print STDERR "description_lang: ", Dumper($description_lang), "\n";
+
+    my $og_locale = $og->property('locale');
+    #print STDERR "og:locale: ", $og_locale // "(undef)", "\n";
+
+    $lang = $og_locale // $keywords_lang // $description_lang;
+    #print STDERR "lang: ", $lang // "(undef)", "\n";
+}
+
+
 
 my %entry = ();
 
@@ -115,6 +158,39 @@ sub parse_author {
 }
 
 
+sub date_parse {
+    my $str = $_[0];
+
+    try {
+        my $date = DateTime::Format::ISO8601->parse_datetime($str);
+        return date_conversion($date);
+    }
+    catch {};
+
+    try {
+        my $date = DateTime::Format::HTTP->parse_datetime($str);
+        return date_conversion($date);
+    }
+    catch {};
+
+    if (test($lang)) {
+        try {
+            my $locale = DateTime::Locale->load($lang);
+            my $cldr = DateTime::Format::CLDR->new(
+                pattern => $locale->date_format_long,
+                locale => $locale);
+
+            print STDERR "CLDR pattern: ", $cldr->pattern, "\n";
+            my $date = $cldr->parse_datetime($str);
+            return date_conversion($date);
+        }
+        catch {};
+    }
+
+    return undef;
+}
+
+
 my $title = $og->property('title');
 if (test($title)) {
     $entry{'title'} = $title;
@@ -149,9 +225,51 @@ else {
     $entry{'type'} = "website";
 }
 
+
+if (test($og_type)) {
+    my $og_issued_date_str;
+    switch ($og_type) {
+        case "article" {
+            $og_issued_date_str = $og->property("$og_type:published_time");
+        }
+        case "book" {
+            $og_issued_date_str = $og->property("$og_type:release_date");
+        }
+    }
+
+    #print STDERR "published time: ", $og_issued_date_str // "(undef)", "\n";
+    if (test($og_issued_date_str)) {
+        try {
+            my $date = date_parse($og_issued_date_str);
+            my $year = $date->year;
+
+            $entry{'issued'} = date_conversion($date);
+
+            if (exists $entry{'id'} && $year) {
+                $entry{'id'} .= $year;
+            }
+        }
+        catch {};
+    }
+}
+elsif (! exists $entry{'issued'}) {
+    # Try article:published_time anyway. Some web sites are retarded like
+    # that. We need to get it through DOM instead of Data::OpenGraph because
+    # the Data::OpenGraph::Parser does not see it if og:type is not defined.
+
+    my $published_time_str = $tree->findvalue(
+        '//head/meta[@property="article:published_time"]/@content');
+    my $date = date_parse($published_time_str);
+    print STDERR "date: ", Dumper($date), "\n";
+    $entry{'issued'} = $date;
+
+    $og_type = 'article';
+    print STDERR "setting og_type to article because article:published_time is present\n";
+}
+
 my $id = undef;
 
-if ($og_type) {
+if (test($og_type)) {
     my @creators = read_og_array ($og, "$og_type:author");
     #print STDERR "creators: ", Dumper(\@creators), "\n";
     if (scalar @creators) {
@@ -168,27 +286,6 @@ if ($og_type) {
             push @{$entry{'author'}}, $author;
         }
         $entry{'id'} = $id;
-    }
-
-    my $og_issued_date_str;
-
-    switch ($og_type) {
-        case "article" {
-            $og_issued_date_str = $og->property("$og_type:published_time"); }
-        case "book" {
-            $og_issued_date_str = $og->property("$og_type:release_date"); }
-    }
-
-    #print STDERR "published time: ", $og_issued_date_str // "(undef)", "\n";
-    if (test($og_issued_date_str)) {
-        my $date = DateTime::Format::ISO8601->parse_datetime($og_issued_date_str);
-        my $year = $date->year;
-
-        $entry{'issued'} = date_conversion $date;
-
-        if (exists $entry{'id'} && $year) {
-            $entry{'id'} .= $year;
-        }
     }
 
     if ($og_type eq 'book'
@@ -208,30 +305,31 @@ if ($og_type) {
     if (scalar @og_tags) {
         $entry{'keyword'} = join ", ", @og_tags;
     }
+}
 
-} # $og_type
 
-my $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
-my $items = $microdata->items;
-print STDERR "microdata as JSON:\n", Dumper($items), "\n";
+# Microdata using the schema.org entities.
 
 my @md_authors = dpath('//author/*')->match($items);
-print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
+#print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
 if (! test($entry{'author'})) {
     if (test(\@md_authors)) {
         foreach my $md_author (@md_authors) {
-            if (exists $md_author->{'type'}
+            if (ref $md_author ne ''
+                && exists $md_author->{'type'}
                 && $md_author->{'type'} eq 'http://schema.org/Person') {
                 my @authors = dpath('/properties/name/*[0]')->match($md_author);
-                #print STDERR "author: ", Dumper(@authors), "\n";
+                if (test(@authors)) {
+                    print STDERR "author: ", Dumper(@authors), "\n";
 
-                my $author = parse_author($authors[0]);
-                if (! $id) {
-                    $id = $author->{'family'};
-                    $id =~ s/\W//g;
-                    $id = lc $id;
+                    my $author = parse_author($authors[0]);
+                    if (! $id) {
+                        $id = $author->{'family'};
+                        $id =~ s/\W//g;
+                        $id = lc $id;
+                    }
+                    push @{$entry{'author'}}, $author;
                 }
-                push @{$entry{'author'}}, $author;
             }
             else {
                 print STDERR ("Found author but not type http://schema.org/Person:\n",
@@ -241,52 +339,22 @@ if (! test($entry{'author'})) {
     }
 }
 
-my @md_articles = dpath('//*/[key eq "type" && (value eq "http://schema.org/Article" || value eq "http://schema.org/NewsArticle")]/..')->match($items);
+my @md_articles = dpath('//*/[key eq "type" && (value eq "http://schema.org/Article" || value eq "http://schema.org/NewsArticle" || value eq "http://schema.org/VideoObject")]/..')->match($items);
 
-print STDERR "article entry:\n", Dumper(@md_articles), "\n";
+
+#print STDERR "article entry:\n", Dumper(@md_articles), "\n";
 if (! test($entry{'issued'})
     && test(\@md_articles)
     && test($md_articles[0]{'properties'}{'datePublished'}[0])) {
-    my $date = DateTime::Format::ISO8601->parse_datetime(
-        $md_articles[0]{'properties'}{'datePublished'}[0]);
-    $entry{'issued'} = date_conversion($date);
+    try {
+        my $date = date_parse(
+            $md_articles[0]{'properties'}{'datePublished'}[0]);
+        $entry{'issued'} = date_conversion($date);
+    }
+    catch {};
 }
 
-if (0) {
-my $microdata = HTML::HTML5::Microdata::Parser->new (
-    $htmldoc, $ARGV[0],
-    {
-        alt_stylesheet => 1,
-        auto_config => 1,
-        mhe_lang => 1,
-        #tdb_service => 1,
-        xhtml_meta => 1,
-        xhtml_rel => 1,
-        xhtml_cite => 1,
-        xhtml_time => 1,
-        xhtml_title => 1,
-        xml_lang => 1
-    });
-print STDERR "microdata->graph:\n", Dumper($microdata->graph), "\n";
-
-my $query = RDF::Query->new(<<'SPARQL');
-PREFIX schema: <http://schema.org/>
-SELECT *
-WHERE {
-   ?author a schema:Person .
-}
-SPARQL
-
-my $people = $query->execute($microdata->graph);
-#print STDERR "authors from RDF:\n", Dumper($people), "\n";
-while (my $person = $people->next) {
-    print STDERR "people: ", $person, "\n";
-}
-}
-
-my $html_headers = HTTP::Headers->new;
-my $headers_parser = HTML::HeadParser->new($html_headers);
-$headers_parser->parse($htmldoc);
+# HTML headers parsing.
 
 if (! exists $entry{'author'}
     && test($html_headers->header('X-Meta-Author'))) {
@@ -299,8 +367,11 @@ if (! exists $entry{'issued'}
     && test($html_meta_date_str)) {
     #print STDERR "date: >", $html_meta_date_str, "<\n";
 
-    my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
-    $entry{'issued'} = date_conversion $date;
+    try {
+        my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
+        $entry{'issued'} = date_conversion($date);
+    }
+    catch {};
 }
 
 $html_meta_date_str = $html_headers->header('X-Meta-Created');
@@ -308,8 +379,11 @@ if (! exists $entry{'issued'}
     && test($html_meta_date_str)) {
     #print STDERR "date: >", $html_meta_date_str, "<\n";
 
-    my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
-    $entry{'issued'} = date_conversion $date;
+    try {
+        my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
+        $entry{'issued'} = date_conversion($date);
+    }
+    catch {};
 }
 
 my $html_meta_keywords = $html_headers->header('X-Meta-Keywords');
