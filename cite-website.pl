@@ -163,13 +163,13 @@ sub date_parse {
 
     try {
         my $date = DateTime::Format::ISO8601->parse_datetime($str);
-        return date_conversion($date);
+        return $date;
     }
     catch {};
 
     try {
         my $date = DateTime::Format::HTTP->parse_datetime($str);
-        return date_conversion($date);
+        return $date;
     }
     catch {};
 
@@ -182,7 +182,7 @@ sub date_parse {
 
             print STDERR "CLDR pattern: ", $cldr->pattern, "\n";
             my $date = $cldr->parse_datetime($str);
-            return date_conversion($date);
+            return $date;
         }
         catch {};
     }
@@ -252,7 +252,8 @@ if (test($og_type)) {
         catch {};
     }
 }
-elsif (! exists $entry{'issued'}) {
+elsif (! exists $entry{'issued'}
+    || ! test($entry{'issued'})) {
     # Try article:published_time anyway. Some web sites are retarded like
     # that. We need to get it through DOM instead of Data::OpenGraph because
     # the Data::OpenGraph::Parser does not see it if og:type is not defined.
@@ -260,8 +261,8 @@ elsif (! exists $entry{'issued'}) {
     my $published_time_str = $tree->findvalue(
         '//head/meta[@property="article:published_time"]/@content');
     my $date = date_parse($published_time_str);
-    print STDERR "date: ", Dumper($date), "\n";
-    $entry{'issued'} = $date;
+    #print STDERR "date: ", Dumper($date), "\n";
+    $entry{'issued'} = date_conversion($date);
 
     $og_type = 'article';
     print STDERR "setting og_type to article because article:published_time is present\n";
@@ -320,7 +321,7 @@ if (! test($entry{'author'})) {
                 && $md_author->{'type'} eq 'http://schema.org/Person') {
                 my @authors = dpath('/properties/name/*[0]')->match($md_author);
                 if (test(@authors)) {
-                    print STDERR "author: ", Dumper(@authors), "\n";
+                    #print STDERR "author: ", Dumper(@authors), "\n";
 
                     my $author = parse_author($authors[0]);
                     if (! $id) {
