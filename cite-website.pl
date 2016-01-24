@@ -260,12 +260,14 @@ elsif (! exists $entry{'issued'}
 
     my $published_time_str = $tree->findvalue(
         '//head/meta[@property="article:published_time"]/@content');
-    my $date = date_parse($published_time_str);
-    #print STDERR "date: ", Dumper($date), "\n";
-    $entry{'issued'} = date_conversion($date);
+    if (test($published_time_str)) {
+        my $date = date_parse($published_time_str);
+        #print STDERR "date: ", Dumper($date), "\n";
+        $entry{'issued'} = date_conversion($date);
 
-    $og_type = 'article';
-    print STDERR "setting og_type to article because article:published_time is present\n";
+        $og_type = 'article';
+        print STDERR "setting og_type to article because article:published_time is present\n";
+    }
 }
 
 my $id = undef;
