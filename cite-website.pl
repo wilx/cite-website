@@ -1,8 +1,10 @@
 #! env perl
 
+use v5.16;
 use strict;
 use warnings;
-use Switch;
+use criticism;
+use experimental 'switch';
 
 use Data::Dumper;
 use LWP::Simple qw();
@@ -187,7 +189,7 @@ sub date_parse {
         catch {};
     }
 
-    return undef;
+    undef;
 }
 
 
@@ -212,11 +214,11 @@ if (test($publisher)) {
 my $og_type = $og->property('_basictype');
 if (test($og_type)) {
     my $type;
-    switch ($og_type) {
-        case "article" { $type = "article"; }
-        case "book" { $type = "book"; }
-        case "website" { $type = "website"; }
-        else { $type = "website"; }
+    given ($og_type) {
+        when ("article") { $type = "article"; }
+        when ("book") { $type = "book"; }
+        when ("website") { $type = "website"; }
+        default { $type = "website"; }
     }
     $entry{'type'} = $type;
 }
@@ -228,11 +230,11 @@ else {
 
 if (test($og_type)) {
     my $og_issued_date_str;
-    switch ($og_type) {
-        case "article" {
+    given ($og_type) {
+        when ("article") {
             $og_issued_date_str = $og->property("$og_type:published_time");
         }
-        case "book" {
+        when ("book") {
             $og_issued_date_str = $og->property("$og_type:release_date");
         }
     }
