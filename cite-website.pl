@@ -20,6 +20,7 @@ use DateTime::Format::HTTP;
 use DateTime::Format::CLDR;
 use IO::Handle;
 use Scalar::Util qw(reftype);
+use String::Util qw(trim);
 use Data::DPath 'dpath';
 use TryCatch;
 
@@ -193,13 +194,18 @@ sub date_parse {
         catch {};
     }
 
-    undef;
+    die "the date ". $str . " could not be parsed";
 }
 
 
 my $title = $og->property('title');
 if (test($title)) {
     $entry{'title'} = $title;
+}
+
+my $description = $og->property('description');
+if (test($description)) {
+    $entry{'abstract'} = $description;
 }
 
 my $url = $og->property('url');
@@ -267,12 +273,15 @@ elsif (! exists $entry{'issued'}
     my $published_time_str = $tree->findvalue(
         '//head/meta[@property="article:published_time"]/@content');
     if (test($published_time_str)) {
-        my $date = date_parse($published_time_str);
-        #print STDERR "date: ", Dumper($date), "\n";
-        $entry{'issued'} = date_conversion($date);
+        try {
+            my $date = date_parse($published_time_str);
+            #print STDERR "date: ", Dumper($date), "\n";
+            $entry{'issued'} = date_conversion($date);
 
-        $og_type = 'article';
-        print STDERR "setting og_type to article because article:published_time is present\n";
+            $og_type = 'article';
+            print STDERR "setting og_type to article because article:published_time is present\n";
+        }
+        catch {};
     }
 }
 
@@ -410,11 +419,16 @@ if (! exists $entry{'issued'}
 my $html_meta_keywords = $html_headers->header('X-Meta-Keywords');
 if (! exists $entry{'keyword'}
     && test($html_meta_keywords)) {
+    trim($html_meta_keywords);
     $html_meta_keywords =~ s/(\s)\s*/$1/g;
-    $html_meta_keywords =~ s/^\s+//g;
-    $html_meta_keywords =~ s/\s+$//g;
     $entry{'keyword'} = $html_meta_keywords;
 }
+
+if (! test($entry{'abstract'})
+    && test($html_headers->header('X-Meta-Description'))) {
+    $entry{'abstract'} = trim($html_headers->header('X-Meta-Description'));
+}
+
 
 $entry{'accessed'} = date_conversion(DateTime->today());
 
