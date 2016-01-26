@@ -350,7 +350,11 @@ if (! test($entry{'author'})) {
     }
 }
 
-my @md_articles = dpath('//*/[key eq "type" && (value eq "http://schema.org/Article" || value eq "http://schema.org/NewsArticle" || value eq "http://schema.org/VideoObject")]/..')->match($items);
+my @md_articles = dpath('//*/[key eq "type"'
+                        . ' && (value eq "http://schema.org/Article"'
+                        . '     || value eq "http://schema.org/NewsArticle"'
+                        . '     || value eq "http://schema.org/VideoObject")]/..')
+    ->match($items);
 
 
 #print STDERR "article entry:\n", Dumper(@md_articles), "\n";
@@ -363,6 +367,12 @@ if (! test($entry{'issued'})
         $entry{'issued'} = date_conversion($date);
     }
     catch {};
+}
+
+if (! test($entry{'abstract'})
+    && test(\@md_articles)
+    && test($md_articles[0]{'properties'}{'description'}[0])) {
+    $entry{'abstract'} = $md_articles[0]{'properties'}{'description'}[0];
 }
 
 # HTML headers parsing.
