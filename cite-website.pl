@@ -137,7 +137,7 @@ sub date_conversion {
 
 
 sub parse_author {
-    my $text = $_[0];
+    my ($text, $additional_name) = @_;
     my $author = {};
 
     if ($text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
@@ -154,6 +154,10 @@ sub parse_author {
     }
     else {
         $author->{'family'} = $text;
+    }
+
+    if (test($additional_name)) {
+        $author->{'given'} .= " (" . $additional_name . ")";
     }
 
     return $author;
@@ -326,9 +330,11 @@ if (! test($entry{'author'})) {
                 my @authors = dpath('/properties/name/*[0]')->match($md_author);
                 if (test(@authors)) {
                     #print STDERR "author: ", Dumper(@authors), "\n";
+                    my @additionalName = dpath('/properties/additionalName/*[0]')
+                        ->match($md_author);
 
-                    my $author = parse_author($authors[0]);
-                    if (! $id) {
+                    my $author = parse_author($authors[0], $additionalName[0]);
+                    if (! test($id)) {
                         $id = $author->{'family'};
                         $id =~ s/\W//g;
                         $id = lc $id;
