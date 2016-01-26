@@ -14,6 +14,7 @@ use HTML::TreeBuilder::XPath;
 use URI;
 use RDF::Query;
 use YAML qw();
+use JSON qw();
 use DateTime::Format::ISO8601;
 use DateTime::Format::W3CDTF;
 use DateTime::Format::HTTP;
@@ -382,6 +383,30 @@ if (! test($entry{'abstract'})
     && test(\@md_articles)
     && test($md_articles[0]{'properties'}{'description'}[0])) {
     $entry{'abstract'} = $md_articles[0]{'properties'}{'description'}[0];
+}
+
+# Microdata from parsely-page meta tag JSON content.
+
+my $parsely_page = $html_headers->header('X-Meta-Parsely-Page');
+my $parsely_page_content;
+if (test($parsely_page)) {
+    $parsely_page_content = JSON::decode_json($parsely_page);
+    print STDERR "parsely-page content:\n", Dumper($parsely_page_content), "\n";
+}
+
+if (! test($entry{'author'})
+    && test($parsely_page_content)
+    && test($parsely_page_content->{'authors'})) {
+    if ((ref $parsely_page_content->{'authors'} // '') eq 'ARRAY') {
+        foreach my $author_str (@{$parsely_page_content->{'authors'}}) {
+            my $author = parse_author($author_str);
+            push @{$entry{'author'}}, $author;
+        }
+    }
+    else {
+        my $author = parse_author($parsely_page_content->{'authors'});
+        push @{$entry{'author'}}, $author;
+    }
 }
 
 # HTML headers parsing.
