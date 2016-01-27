@@ -68,6 +68,15 @@ my $items = $microdata->items;
 my $tree = HTML::TreeBuilder::XPath->new;
 $tree->parse($htmldoc);
 
+# Microdata from parsely-page meta tag JSON content.
+
+my $parsely_page = $html_headers->header('X-Meta-Parsely-Page');
+my $parsely_page_content;
+if (test($parsely_page)) {
+    $parsely_page_content = JSON::decode_json($parsely_page);
+    print STDERR "parsely-page content:\n", Dumper($parsely_page_content), "\n";
+}
+
 # Parse language out of meta headers.
 
 my $lang;
@@ -169,6 +178,16 @@ sub parse_author {
 sub date_parse {
     my $str = $_[0];
 
+    # Some web sites (www.washingtonpost.com) fail at to provide a date that
+    # can be parsed by any of of the code below by using only 3 digit time
+    # zone offset: 2016-01-27T02:24-500. Fix it here.
+
+    #print STDERR "original date: ", $str, "\n";
+    $str =~ s/^(\d\d\d\d-?\d\d-?\d\dT\d\d:?\d\d[+-])(\d\d\d)$/${1}0$2/;
+    #print STDERR "fixed date: ", $str, "\n";
+
+    # Try various parsing routines.
+
     try {
         my $date = DateTime::Format::ISO8601->parse_datetime($str);
         return $date;
@@ -190,12 +209,12 @@ sub date_parse {
 
             print STDERR "CLDR pattern: ", $cldr->pattern, "\n";
             my $date = $cldr->parse_datetime($str);
-            return $date;
+            die "could not parse date $str: " . $cldr->errmsg() unless defined $date;
         }
         catch {};
     }
 
-    die "the date ". $str . " could not be parsed";
+    die "the date " . $str . " could not be parsed";
 }
 
 
@@ -289,24 +308,6 @@ elsif (! exists $entry{'issued'}
 my $id = undef;
 
 if (test($og_type)) {
-    my @creators = read_og_array ($og, "$og_type:author");
-    #print STDERR "creators: ", Dumper(\@creators), "\n";
-    if (scalar @creators) {
-        foreach my $creator (@creators) {
-            #print STDERR "creator: >$creator<\n";
-            my $creator_text = $creator;
-            my $author = parse_author($creator_text);
-            if (! $id) {
-                $id = $author->{'family'};
-                $id =~ s/\W//g;
-                $id = lc $id;
-            }
-
-            push @{$entry{'author'}}, $author;
-        }
-        $entry{'id'} = $id;
-    }
-
     if ($og_type eq 'book'
         && test($og->property("$og_type:isbn"))) {
         $entry{'ISBN'} = $og->property("$og_type:isbn");
@@ -353,10 +354,31 @@ if (! test($entry{'author'})) {
                 }
             }
             else {
-                print STDERR ("Found author but not type http://schema.org/Person:\n",
-                              Dumper($md_author), "\n");
+                print STDERR "Found author but not type http://schema.org/Person: ",
+                              $md_author, "\n";
             }
         }
+    }
+}
+
+if (! test($entry{'author'})
+    && test($og_type)) {
+    my @creators = read_og_array ($og, "$og_type:author");
+    #print STDERR "creators: ", Dumper(\@creators), "\n";
+    if (scalar @creators) {
+        foreach my $creator (@creators) {
+            #print STDERR "creator: >$creator<\n";
+            my $creator_text = $creator;
+            my $author = parse_author($creator_text);
+            if (! $id) {
+                $id = $author->{'family'};
+                $id =~ s/\W//g;
+                $id = lc $id;
+            }
+
+            push @{$entry{'author'}}, $author;
+        }
+        $entry{'id'} = $id;
     }
 }
 
@@ -386,13 +408,6 @@ if (! test($entry{'abstract'})
 }
 
 # Microdata from parsely-page meta tag JSON content.
-
-my $parsely_page = $html_headers->header('X-Meta-Parsely-Page');
-my $parsely_page_content;
-if (test($parsely_page)) {
-    $parsely_page_content = JSON::decode_json($parsely_page);
-    print STDERR "parsely-page content:\n", Dumper($parsely_page_content), "\n";
-}
 
 if (! test($entry{'author'})
     && test($parsely_page_content)
