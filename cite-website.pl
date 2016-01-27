@@ -385,7 +385,8 @@ if (! test($entry{'author'})
 my @md_articles = dpath('//*/[key eq "type"'
                         . ' && (value eq "http://schema.org/Article"'
                         . '     || value eq "http://schema.org/NewsArticle"'
-                        . '     || value eq "http://schema.org/VideoObject")]/..')
+                        . '     || value eq "http://schema.org/VideoObject")'
+                        . '     || value eq "http://schema.org/BlogPosting"]/..')
     ->match($items);
 
 
