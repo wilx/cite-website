@@ -247,14 +247,14 @@ if (test($og_type)) {
     given ($og_type) {
         when ("article") { $type = "article"; }
         when ("book") { $type = "book"; }
-        when ("website") { $type = "website"; }
-        default { $type = "website"; }
+        when ("website") { $type = "webpage"; }
+        default { $type = "webpage"; }
     }
     $entry{'type'} = $type;
 }
 else {
     Carp::carp("og:type attribute is missing.");
-    $entry{'type'} = "website";
+    $entry{'type'} = "webpage";
 }
 
 
