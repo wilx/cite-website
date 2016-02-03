@@ -77,6 +77,28 @@ if (test($parsely_page)) {
     print STDERR "parsely-page content:\n", Dumper($parsely_page_content), "\n";
 }
 
+# Schema.org data out of <script type="application/ld+json"> tag.
+
+my $schema_org_ld_json;
+
+try {
+    my $ld_json = $tree->findvalue('//script[@type="application/ld+json"]/text()');
+    #print STDERR "raw schema.org JSON+LD data:\n", Dumper($ld_json), "\n";
+    if (test($ld_json)) {
+        try {
+            $schema_org_ld_json = JSON::decode_json($ld_json);
+            print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
+            if (!(test($schema_org_ld_json->{'@context'})
+                  && $schema_org_ld_json->{'@context'} eq 'http://schema.org'
+                  && test($schema_org_ld_json->{'@type'}))) {
+                $schema_org_ld_json = undef;
+            }
+        }
+        catch {};
+    }
+}
+catch {};
+
 # Parse language out of meta headers.
 
 my $lang;
@@ -361,6 +383,8 @@ if (! test($entry{'author'})) {
     }
 }
 
+# Open Graph author.
+
 if (! test($entry{'author'})
     && test($og_type)) {
     my @creators = read_og_array ($og, "$og_type:author");
@@ -423,6 +447,18 @@ if (! test($entry{'author'})
         my $author = parse_author($parsely_page_content->{'authors'});
         push @{$entry{'author'}}, $author;
     }
+}
+
+# Schema.org microdata in JSON+LD in <script type="application/ld+json">.
+
+if (! test($entry{'issued'})
+    && test($schema_org_ld_json->{'dateCreated'})) {
+
+    try {
+        my $date = date_parse($schema_org_ld_json->{'dateCreated'});
+        $entry{'issued'} = date_conversion($date);
+    }
+    catch {};
 }
 
 # HTML headers parsing.
