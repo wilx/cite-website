@@ -19,6 +19,7 @@ use DateTime::Format::ISO8601;
 use DateTime::Format::W3CDTF;
 use DateTime::Format::HTTP;
 use DateTime::Format::CLDR;
+use DateTime::Format::Epoch;
 use IO::Handle;
 use Scalar::Util qw(reftype);
 use String::Util qw(trim);
@@ -56,12 +57,18 @@ $headers_parser->parse($htmldoc);
 
 my $og = Data::OpenGraph->parse_string($htmldoc);
 #print STDERR "og:\n", Dumper($og->{properties}), "\n";
+if (test($og)) {
+    print STDERR "It looks like we have some Open Graph data.\n";
+}
 
 # Microdata parsing.
 
 my $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
 my $items = $microdata->items;
 #print STDERR "microdata as JSON:\n", Dumper($items), "\n";
+if (test($items)) {
+    print STDERR "It looks like we have some microdata in HTML.\n";
+}
 
 # HTML as tree parsing.
 
@@ -74,7 +81,8 @@ my $parsely_page = $html_headers->header('X-Meta-Parsely-Page');
 my $parsely_page_content;
 if (test($parsely_page)) {
     $parsely_page_content = JSON::decode_json($parsely_page);
-    print STDERR "parsely-page content:\n", Dumper($parsely_page_content), "\n";
+    print STDERR "It looks like we have found some Parsely-Page microdata.\n";
+    #print STDERR "parsely-page content:\n", Dumper($parsely_page_content), "\n";
 }
 
 # Schema.org data out of <script type="application/ld+json"> tag.
@@ -92,6 +100,9 @@ try {
                   && $schema_org_ld_json->{'@context'} eq 'http://schema.org'
                   && test($schema_org_ld_json->{'@type'}))) {
                 $schema_org_ld_json = undef;
+            }
+            else {
+                print STDERR "It looks like we have some schema.org data in JSON+LD.\n";
             }
         }
         catch {};
@@ -236,6 +247,24 @@ sub date_parse {
         catch {};
     }
 
+    # Parse POSIX seconds since epoch time stamp.
+    if ($str =~ /\d{10,}/) {
+        try {
+            my $dt = DateTime->new( year => 1970, month => 1, day => 1 );
+            my $parser = DateTime::Format::Epoch->new(
+                epoch => $dt,
+                unit => 'seconds',
+                type => 'bigint',
+                skip_leap_seconds => 1,
+                start_at => 0,
+                local_epoch => undef);
+            my $date = $parser->parse_datetime($str);
+            #print STDERR "date from epoch: ", $date, "\n";
+            return $date;
+        }
+        catch {};
+    }
+
     die "the date " . $str . " could not be parsed";
 }
 
@@ -265,6 +294,7 @@ if (test($publisher)) {
 
 my $og_type = $og->property('_basictype');
 if (test($og_type)) {
+    print STDERR "It looks like we have Open Graph type ", $og_type, ".\n";
     my $type;
     given ($og_type) {
         when ("article") { $type = "article"; }
@@ -275,7 +305,7 @@ if (test($og_type)) {
     $entry{'type'} = $type;
 }
 else {
-    Carp::carp("og:type attribute is missing.");
+    print STDERR "og:type attribute is missing.\n";
     $entry{'type'} = "webpage";
 }
 
@@ -356,6 +386,8 @@ my @md_authors = dpath('//author/*')->match($items);
 #print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
 if (! test($entry{'author'})) {
     if (test(\@md_authors)) {
+        print STDERR ("It looks like we have ", scalar @md_authors,
+                      " schema.org authors.\n");
         foreach my $md_author (@md_authors) {
             if (ref $md_author ne ''
                 && exists $md_author->{'type'}
@@ -412,9 +444,11 @@ my @md_articles = dpath('//*/[key eq "type"'
                         . '     || value eq "http://schema.org/VideoObject")'
                         . '     || value eq "http://schema.org/BlogPosting"]/..')
     ->match($items);
+if (test(@md_articles)) {
+    print STDERR "It looks like we have an instance of schema.org article.\n";
+}
 
-
-#print STDERR "article entry:\n", Dumper(@md_articles), "\n";
+print STDERR "article entry:\n", Dumper(@md_articles), "\n";
 if (! test($entry{'issued'})
     && test(\@md_articles)
     && test($md_articles[0]{'properties'}{'datePublished'}[0])) {
@@ -482,6 +516,19 @@ if (! exists $entry{'issued'}
 }
 
 $html_meta_date_str = $html_headers->header('X-Meta-Created');
+if (! exists $entry{'issued'}
+    && test($html_meta_date_str)) {
+    #print STDERR "date: >", $html_meta_date_str, "<\n";
+
+    try {
+        my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
+        $entry{'issued'} = date_conversion($date);
+    }
+    catch {};
+}
+
+$html_meta_date_str = $tree->findvalue(
+    '//head/meta[lower-case(@property)="published-date"]/@content');
 if (! exists $entry{'issued'}
     && test($html_meta_date_str)) {
     #print STDERR "date: >", $html_meta_date_str, "<\n";
