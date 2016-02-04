@@ -37,7 +37,7 @@ my $ua = LWP::UserAgent->new;
 $ua->timeout(30);
 # Fake user agent identification is necessary. Some webs simply do not
 # respond if they think this is some kind of crawler they do not like.
-$ua->agent('Mozilla/5.0');
+$ua->agent('Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.1');
 my $response = $ua->get($ARGV[0]);
 my $htmldoc;
 if ($response->is_success) {
