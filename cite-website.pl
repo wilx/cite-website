@@ -10,6 +10,7 @@ use Data::Dumper;
 use LWP::Simple qw();
 use Data::OpenGraph;
 use HTML::Microdata;
+use HTML::DublinCore;
 use HTML::TreeBuilder::XPath;
 use URI;
 use RDF::Query;
@@ -127,7 +128,12 @@ my $lang;
     #print STDERR "lang: ", $lang // "(undef)", "\n";
 }
 
+# Parse DublinCore meta headers.
 
+my $dc = HTML::DublinCore->new($htmldoc);
+#print STDERR "DublinCore:\n", Dumper($dc), "\n";
+
+# Fill in %entry.
 
 my %entry = ();
 
@@ -240,7 +246,7 @@ sub date_parse {
                 pattern => $locale->date_format_long,
                 locale => $locale);
 
-            print STDERR "CLDR pattern: ", $cldr->pattern, "\n";
+            #print STDERR "CLDR pattern: ", $cldr->pattern, "\n";
             my $date = $cldr->parse_datetime($str);
             die "could not parse date $str: " . $cldr->errmsg() unless defined $date;
         }
@@ -438,17 +444,20 @@ if (! test($entry{'author'})
     }
 }
 
-my @md_articles = dpath('//*/[key eq "type"'
-                        . ' && (value eq "http://schema.org/Article"'
-                        . '     || value eq "http://schema.org/NewsArticle"'
-                        . '     || value eq "http://schema.org/VideoObject")'
-                        . '     || value eq "http://schema.org/BlogPosting"]/..')
+my @md_articles = dpath(
+    '//*/[key eq "type"'
+    . ' && (value eq "http://schema.org/Article"'
+    . '     || value eq "http://schema.org/CreativeWork"'
+    . '     || value eq "http://schema.org/NewsArticle"'
+    . '     || value eq "http://schema.org/VideoObject"'
+    . '     || value eq "http://schema.org/ScholarlyArticle"'
+    . '     || value eq "http://schema.org/BlogPosting")]/..')
     ->match($items);
 if (test(@md_articles)) {
     print STDERR "It looks like we have an instance of schema.org article.\n";
 }
 
-print STDERR "article entry:\n", Dumper(@md_articles), "\n";
+#print STDERR "article entry:\n", Dumper(@md_articles), "\n";
 if (! test($entry{'issued'})
     && test(\@md_articles)
     && test($md_articles[0]{'properties'}{'datePublished'}[0])) {
@@ -490,6 +499,17 @@ if (! test($entry{'issued'})
 
     try {
         my $date = date_parse($schema_org_ld_json->{'dateCreated'});
+        $entry{'issued'} = date_conversion($date);
+    }
+    catch {};
+}
+
+my $dc_date = $dc->date;
+if (! test($entry{'issued'})
+    && test($dc_date)) {
+    #print STDERR "raw date: ", $dc_date->content, "\n";
+    try {
+        my $date = date_parse($dc_date->content);
         $entry{'issued'} = date_conversion($date);
     }
     catch {};
