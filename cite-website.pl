@@ -475,6 +475,41 @@ if (! test($entry{'abstract'})
     $entry{'abstract'} = $md_articles[0]{'properties'}{'description'}[0];
 }
 
+if (! test($entry{'keyword'})
+    && test(\@md_articles)
+    && test($md_articles[0]{'properties'}{'keywords'})) {
+    $entry{'keyword'} = join ", ", @{$md_articles[0]{'properties'}{'keywords'}};
+}
+
+my @ispartof = dpath(
+    '/properties/isPartOf/*/'
+    . '[key eq "type"'
+    . ' && value eq "http://schema.org/PublicationVolume"]/'
+    . '../properties')
+    ->match($md_articles[0]);
+#print STDERR "ispartof:\n", Dumper(\@ispartof), "\n";
+if (test(@ispartof)) {
+    print STDERR "It looks like we have isPartOf/PublicationVolume in article.\n";
+
+    if (! test($entry{'volume'})) {
+        my @vol = dpath('/volumeNumber/*[0]')->match($ispartof[0]);
+        #print STDERR "volume:\n", Dumper(\@vol), "\n";
+        if (test(\@vol)) {
+            $entry{'volume'} = $vol[0];
+        }
+    }
+
+    if (! test($entry{'container-title'})) {
+        my @cont = dpath('/isPartOf/*[0]/*/'
+                         . '[key eq "type"'
+                         . ' && value eq "http://schema.org/Periodical"]/'
+                         . '../properties/name/*[0]')->match($ispartof[0]);
+        if (test (\@cont)) {
+            $entry{'container-title'} = $cont[0];
+        }
+    }
+}
+
 # Microdata from parsely-page meta tag JSON content.
 
 if (! test($entry{'author'})
@@ -506,7 +541,8 @@ if (! test($entry{'issued'})
 
 my $dc_date = $dc->date;
 if (! test($entry{'issued'})
-    && test($dc_date)) {
+    && test($dc_date)
+    && test($dc_date->content)) {
     #print STDERR "raw date: ", $dc_date->content, "\n";
     try {
         my $date = date_parse($dc_date->content);
