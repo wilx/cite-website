@@ -12,6 +12,7 @@ use Data::OpenGraph;
 use HTML::Microdata;
 use HTML::DublinCore;
 use HTML::TreeBuilder::XPath;
+use HTML::Entities;
 use URI;
 use RDF::Query;
 use YAML qw();
@@ -277,12 +278,12 @@ sub date_parse {
 
 my $title = $og->property('title');
 if (test($title)) {
-    $entry{'title'} = $title;
+    $entry{'title'} = decode_entities($title);
 }
 
 my $description = $og->property('description');
 if (test($description)) {
-    $entry{'abstract'} = $description;
+    $entry{'abstract'} = decode_entities($description);
 }
 
 my $url = $og->property('url');
