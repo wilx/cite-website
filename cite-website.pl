@@ -13,6 +13,7 @@ use HTML::Microdata;
 use HTML::DublinCore;
 use HTML::TreeBuilder::XPath;
 use HTML::Entities;
+use HTML::HeadParser;
 use URI;
 use RDF::Query;
 use YAML qw();
@@ -35,7 +36,9 @@ local $SIG{__WARN__} = sub { print( Carp::longmess (shift) ); };
 STDOUT->binmode(":utf8");
 STDERR->binmode(":utf8");
 
-my $ua = LWP::UserAgent->new;
+my $ua = LWP::UserAgent->new(keep_alive => 10);
+push @{ $ua->requests_redirectable }, 'POST';
+$ua->cookie_jar({});
 $ua->timeout(30);
 # Fake user agent identification is necessary. Some webs simply do not
 # respond if they think this is some kind of crawler they do not like.
@@ -46,6 +49,7 @@ if ($response->is_success) {
     $htmldoc = $response->decoded_content;
 }
 else {
+    #print STDERR "resp: ", Dumper($response), "\n";
     die $response->status_line;
 }
 
@@ -146,7 +150,8 @@ sub test {
                   && scalar @$x)
                  || (reftype($x) eq 'HASH'
                      && scalar keys %$x)))
-            || length ($x));
+            || (ref($x) eq ''
+                && length($x) != 0));
 }
 
 
