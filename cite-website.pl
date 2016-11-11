@@ -1,10 +1,72 @@
 #! env perl
 
-use v5.16;
+#no warnings qw(experimental::signatures);
+
+package RefRec;
+
+use v5.20;
 use strict;
 use warnings;
 use criticism;
+
+use Moose;
+use MooseX::StrictConstructor;
+
+has 'id' => (is => 'rw', isa => 'Maybe[Str]');
+has 'title' => (is => 'rw', isa => 'Maybe[Str]');
+has 'type' => (is => 'rw', isa => 'Maybe[Str]');
+has 'author' => (is => 'rw', isa => 'Maybe[ArrayRef[HashRef[Str]]]',
+    default => sub { return []; });
+has 'abstract' => (is => 'rw', isa => 'Maybe[Str]');
+has 'keyword' => (is => 'rw', isa => 'Maybe[Str]');
+sub container_title;
+has 'container-title' => (is => 'rw', isa => 'Maybe[Str]',
+    reader => &container_title, writer => &container_title);
+has 'publisher' => (is => 'rw', isa => 'Maybe[Str]');
+sub publisher_place;
+has 'publisher-place' => (is => 'rw', isa => 'Maybe[Str]',
+    reader => &publisher_place, writer => &publisher_place);
+has 'volume' => (is => 'rw', isa => 'Maybe[Str]');
+has 'issue' => (is => 'rw', isa => 'Maybe[Str]');
+has 'page' => (is => 'rw', isa => 'Maybe[Str]');
+has 'issued' => (is => 'rw', isa => 'Maybe[HashRef|ArrayRef]',
+                 default => undef );
+has 'accessed' => (is => 'rw', isa => 'Maybe[HashRef|ArrayRef]',
+                   default => undef );
+has 'ISBN' => (is => 'rw', isa => 'Maybe[Str]');
+has 'ISSN' => (is => 'rw', isa => 'Maybe[Str]');
+has 'URL' => (is => 'rw', isa => 'Maybe[Str]');
+has 'DOI' => (is => 'rw', isa => 'Maybe[Str]');
+
+sub publisher_place {
+    my $self = shift;
+    if (scalar(@_) == 1) {
+        $self->{"publisher-place"} = shift;
+    }
+    return $self->{"name"};
+}
+
+sub container_title {
+    my $self = shift;
+    if (scalar(@_) == 1) {
+        $self->{"content-title"} = shift;
+    }
+    return $self->{"name"};
+}
+
+no Moose;
+
+
+package main;
+
+use v5.20;
+use strict;
+use warnings;
+use criticism;
+## no critic (ProhibitSubroutinePrototypes)
 use experimental 'switch';
+use feature qw(signatures);
+no warnings qw(experimental::signatures);
 
 use Data::Dumper;
 use LWP::Simple qw();
@@ -140,8 +202,6 @@ my $dc = HTML::DublinCore->new($htmldoc);
 
 # Fill in %entry.
 
-my %entry = ();
-
 sub test {
     my $x = $_[0];
     return defined ($x)
@@ -154,6 +214,18 @@ sub test {
                 && length($x) != 0));
 }
 
+sub choose {
+    my @values = @_;
+    print STDERR "choose(", Dumper(\@values), ")\n";
+    foreach my $val (@values) {
+        if (test($val)) {
+            print STDERR "Choosing ", Dumper($val), "\n";
+            return $val;
+        }
+    }
+
+    return;
+}
 
 sub read_og_array {
     my ($og, $prop) = @_;
@@ -280,123 +352,150 @@ sub date_parse {
     die "the date " . $str . " could not be parsed";
 }
 
+# Build RefRec out of OpenGraph data.
 
-my $title = $og->property('title');
-if (test($title)) {
-    $entry{'title'} = decode_entities($title);
-}
+sub processOpenGraph ($og) {
+    my $ogRec = RefRec->new;
 
-my $description = $og->property('description');
-if (test($description)) {
-    $entry{'abstract'} = decode_entities($description);
-}
-
-my $url = $og->property('url');
-if (test($url)) {
-    $entry{'URL'} = $url;
-}
-else {
-    $entry{'URL'} = $ARGV[0];
-}
-
-my $publisher = $og->property('site_name');
-if (test($publisher)) {
-    $entry{'publisher'} = $publisher;
-}
-
-my $og_type = $og->property('_basictype');
-if (test($og_type)) {
-    print STDERR "It looks like we have Open Graph type ", $og_type, ".\n";
-    my $type;
-    given ($og_type) {
-        when ("article") { $type = "article"; }
-        when ("book") { $type = "book"; }
-        when ("website") { $type = "webpage"; }
-        default { $type = "webpage"; }
-    }
-    $entry{'type'} = $type;
-}
-else {
-    print STDERR "og:type attribute is missing.\n";
-    $entry{'type'} = "webpage";
-}
-
-
-if (test($og_type)) {
-    my $og_issued_date_str;
-    given ($og_type) {
-        when ("article") {
-            $og_issued_date_str = $og->property("$og_type:published_time");
-        }
-        when ("book") {
-            $og_issued_date_str = $og->property("$og_type:release_date");
-        }
+    my $title = $og->property('title');
+    if (test($title)) {
+        $ogRec->title(decode_entities($title));
     }
 
-    #print STDERR "published time: ", $og_issued_date_str // "(undef)", "\n";
-    if (test($og_issued_date_str)) {
-        try {
-            my $date = date_parse($og_issued_date_str);
-            my $year = $date->year;
+    my $description = $og->property('description');
+    if (test($description)) {
+        $ogRec->abstract(trim(decode_entities($description)));
+    }
 
-            $entry{'issued'} = date_conversion($date);
+    my $url = $og->property('url');
+    if (test($url)) {
+        $ogRec->URL($url);
+    }
 
-            if (exists $entry{'id'} && $year) {
-                $entry{'id'} .= $year;
+    my $publisher = $og->property('site_name');
+    if (test($publisher)) {
+        $ogRec->publisher(decode_entities($publisher));
+    }
+
+    my $og_type = $og->property('_basictype');
+    if (test($og_type)) {
+        print STDERR "It looks like we have Open Graph type ", $og_type, ".\n";
+        my $type;
+        given ($og_type) {
+            when ("article") { $type = "article"; }
+            when ("book") { $type = "book"; }
+            when ("website") { $type = "webpage"; }
+            default { $type = "webpage"; }
+        }
+        $ogRec->type($type);
+    }
+    else {
+        print STDERR "og:type attribute is missing.\n";
+        $ogRec->type("webpage");
+    }
+
+
+    if (test($og_type)) {
+        my $og_issued_date_str;
+        given ($og_type) {
+            when ("article") {
+                $og_issued_date_str = $og->property("$og_type:published_time");
+            }
+            when ("book") {
+                $og_issued_date_str = $og->property("$og_type:release_date");
             }
         }
-        catch {};
-    }
-}
-elsif (! exists $entry{'issued'}
-    || ! test($entry{'issued'})) {
-    # Try article:published_time anyway. Some web sites are retarded like
-    # that. We need to get it through DOM instead of Data::OpenGraph because
-    # the Data::OpenGraph::Parser does not see it if og:type is not defined.
 
-    my $published_time_str = $tree->findvalue(
-        '//head/meta[@property="article:published_time"]/@content');
-    if (test($published_time_str)) {
-        try {
-            my $date = date_parse($published_time_str);
-            #print STDERR "date: ", Dumper($date), "\n";
-            $entry{'issued'} = date_conversion($date);
+        #print STDERR "published time: ", $og_issued_date_str // "(undef)", "\n";
+        if (test($og_issued_date_str)) {
+            try {
+                my $date = date_parse($og_issued_date_str);
+                my $year = $date->year;
 
-            $og_type = 'article';
-            print STDERR "setting og_type to article because article:published_time is present\n";
+                $ogRec->issued(date_conversion($date));
+
+                # TODO: Add 'id' generation for final reference record.
+                #if (exists $entry{'id'} && $year) {
+                #    $entry{'id'} .= $year;
+                #}
+            }
+            catch {};
         }
-        catch {};
     }
+    elsif (! test($ogRec->issued)) {
+        # Try article:published_time anyway. Some web sites are retarded like
+        # that. We need to get it through DOM instead of Data::OpenGraph because
+        # the Data::OpenGraph::Parser does not see it if og:type is not defined.
+
+        my $published_time_str = $tree->findvalue(
+            '//head/meta[@property="article:published_time"]/@content');
+        if (test($published_time_str)) {
+            try {
+                my $date = date_parse($published_time_str);
+                #print STDERR "date: ", Dumper($date), "\n";
+                $ogRec->issued(date_conversion($date));
+
+                $ogRec->type('article');
+                print STDERR "setting og_type to article because article:published_time is present\n";
+            }
+            catch {};
+        }
+    }
+
+    #my $id = undef;
+
+    if (test($og_type)) {
+        if ($og_type eq 'book'
+            && test($og->property("$og_type:isbn"))) {
+            $ogRec->ISBN($og->property("$og_type:isbn"));
+        }
+
+        if (! test($publisher)
+            && test($og->property("$og_type:publisher"))) {
+            $publisher = $og->property("$og_type:publisher");
+            $ogRec->publisher($publisher);
+        }
+
+        my @og_tags = read_og_array ($og, "$og_type:tag");
+        #print STDERR "tags: ", Dumper($og->property("$og_type:tag")), "\n";
+        #print STDERR "tags: ", Dumper(\@og_tags), "\n";
+        if (scalar @og_tags) {
+            $ogRec->keyword(join ", ", @og_tags);
+        }
+    }
+
+    # Author.
+
+    if (test($og_type)) {
+        my @creators = read_og_array ($og, "$og_type:author");
+        #print STDERR "creators: ", Dumper(\@creators), "\n";
+        if (scalar @creators) {
+            foreach my $creator (@creators) {
+                #print STDERR "creator: >$creator<\n";
+                my $creator_text = $creator;
+                my $author = parse_author($creator_text);
+                push @{$ogRec->author}, $author;
+            }
+        }
+    }
+
+    return $ogRec;
 }
 
-my $id = undef;
-
-if (test($og_type)) {
-    if ($og_type eq 'book'
-        && test($og->property("$og_type:isbn"))) {
-        $entry{'ISBN'} = $og->property("$og_type:isbn");
-    }
-
-    if (! test($publisher)
-        && test($og->property("$og_type:publisher"))) {
-        $publisher = $og->property("$og_type:publisher");
-        $entry{'publisher'} = $publisher;
-    }
-
-    my @og_tags = read_og_array ($og, "$og_type:tag");
-    #print STDERR "tags: ", Dumper($og->property("$og_type:tag")), "\n";
-    #print STDERR "tags: ", Dumper(\@og_tags), "\n";
-    if (scalar @og_tags) {
-        $entry{'keyword'} = join ", ", @og_tags;
-    }
+my $ogRec = RefRec->new;
+if (test($og)) {
+    $ogRec = processOpenGraph($og);
 }
 
 
 # Microdata using the schema.org entities.
 
-my @md_authors = dpath('//author/*')->match($items);
-#print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
-if (! test($entry{'author'})) {
+sub processSchemaOrg($items) {
+    my $mdRec = RefRec->new;
+
+    my @md_authors = dpath('//author/*')->match($items);
+    #print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
+
     if (test(\@md_authors)) {
         print STDERR ("It looks like we have ", scalar @md_authors,
                       " schema.org authors.\n");
@@ -411,211 +510,368 @@ if (! test($entry{'author'})) {
                         ->match($md_author);
 
                     my $author = parse_author($authors[0], $additionalName[0]);
-                    if (! test($id)) {
-                        $id = $author->{'family'};
-                        $id =~ s/\W//g;
-                        $id = lc $id;
-                    }
-                    push @{$entry{'author'}}, $author;
+                    # if (! test($id)) {
+                    #     $id = $author->{'family'};
+                    #     $id =~ s/\W//g;
+                    #     $id = lc $id;
+                    # }
+                    push @{$mdRec->author}, $author;
                 }
             }
             else {
                 print STDERR "Found author but not type http://schema.org/Person: ",
-                              $md_author, "\n";
+                $md_author, "\n";
             }
         }
     }
-}
 
-# Open Graph author.
 
-if (! test($entry{'author'})
-    && test($og_type)) {
-    my @creators = read_og_array ($og, "$og_type:author");
-    #print STDERR "creators: ", Dumper(\@creators), "\n";
-    if (scalar @creators) {
-        foreach my $creator (@creators) {
-            #print STDERR "creator: >$creator<\n";
-            my $creator_text = $creator;
-            my $author = parse_author($creator_text);
-            if (! $id) {
-                $id = $author->{'family'};
-                $id =~ s/\W//g;
-                $id = lc $id;
-            }
 
-            push @{$entry{'author'}}, $author;
+    my @md_articles = dpath(
+        '//*/[key eq "type"'
+        . ' && (value eq "http://schema.org/Article"'
+        . '     || value eq "http://schema.org/CreativeWork"'
+        . '     || value eq "http://schema.org/NewsArticle"'
+        . '     || value eq "http://schema.org/VideoObject"'
+        . '     || value eq "http://schema.org/ScholarlyArticle"'
+        . '     || value eq "http://schema.org/BlogPosting")]/..')
+        ->match($items);
+    if (test(@md_articles)) {
+        print STDERR "It looks like we have an instance of schema.org article.\n";
+    }
+
+    #print STDERR "article entry:\n", Dumper(@md_articles), "\n";
+    if (test(\@md_articles)
+        && test($md_articles[0]{'properties'}{'datePublished'}[0])) {
+        try {
+            my $date = date_parse(
+                $md_articles[0]{'properties'}{'datePublished'}[0]);
+            $mdRec->issued(date_conversion($date));
         }
-        $entry{'id'} = $id;
+        catch {};
     }
-}
 
-my @md_articles = dpath(
-    '//*/[key eq "type"'
-    . ' && (value eq "http://schema.org/Article"'
-    . '     || value eq "http://schema.org/CreativeWork"'
-    . '     || value eq "http://schema.org/NewsArticle"'
-    . '     || value eq "http://schema.org/VideoObject"'
-    . '     || value eq "http://schema.org/ScholarlyArticle"'
-    . '     || value eq "http://schema.org/BlogPosting")]/..')
-    ->match($items);
-if (test(@md_articles)) {
-    print STDERR "It looks like we have an instance of schema.org article.\n";
-}
-
-#print STDERR "article entry:\n", Dumper(@md_articles), "\n";
-if (! test($entry{'issued'})
-    && test(\@md_articles)
-    && test($md_articles[0]{'properties'}{'datePublished'}[0])) {
-    try {
-        my $date = date_parse(
-            $md_articles[0]{'properties'}{'datePublished'}[0]);
-        $entry{'issued'} = date_conversion($date);
+    if (test(\@md_articles)
+        && test($md_articles[0]{'properties'}{'description'}[0])) {
+        $mdRec->abstract($md_articles[0]{'properties'}{'description'}[0]);
     }
-    catch {};
-}
 
-if (! test($entry{'abstract'})
-    && test(\@md_articles)
-    && test($md_articles[0]{'properties'}{'description'}[0])) {
-    $entry{'abstract'} = $md_articles[0]{'properties'}{'description'}[0];
-}
+    if (test(\@md_articles)
+        && test($md_articles[0]{'properties'}{'keywords'})) {
+        $mdRec->keyword(join ", ", @{$md_articles[0]{'properties'}{'keywords'}});
+    }
 
-if (! test($entry{'keyword'})
-    && test(\@md_articles)
-    && test($md_articles[0]{'properties'}{'keywords'})) {
-    $entry{'keyword'} = join ", ", @{$md_articles[0]{'properties'}{'keywords'}};
-}
+    my @ispartof = dpath(
+        '/properties/isPartOf/*/'
+        . '[key eq "type"'
+        . ' && value eq "http://schema.org/PublicationVolume"]/'
+        . '../properties')
+        ->match($md_articles[0]);
+    #print STDERR "ispartof:\n", Dumper(\@ispartof), "\n";
+    if (test(@ispartof)) {
+        print STDERR "It looks like we have isPartOf/PublicationVolume in article.\n";
 
-my @ispartof = dpath(
-    '/properties/isPartOf/*/'
-    . '[key eq "type"'
-    . ' && value eq "http://schema.org/PublicationVolume"]/'
-    . '../properties')
-    ->match($md_articles[0]);
-#print STDERR "ispartof:\n", Dumper(\@ispartof), "\n";
-if (test(@ispartof)) {
-    print STDERR "It looks like we have isPartOf/PublicationVolume in article.\n";
 
-    if (! test($entry{'volume'})) {
         my @vol = dpath('/volumeNumber/*[0]')->match($ispartof[0]);
         #print STDERR "volume:\n", Dumper(\@vol), "\n";
         if (test(\@vol)) {
-            $entry{'volume'} = $vol[0];
+            $mdRec->volume($vol[0]);
         }
-    }
 
-    if (! test($entry{'container-title'})) {
+
+
         my @cont = dpath('/isPartOf/*[0]/*/'
                          . '[key eq "type"'
                          . ' && value eq "http://schema.org/Periodical"]/'
                          . '../properties/name/*[0]')->match($ispartof[0]);
         if (test (\@cont)) {
-            $entry{'container-title'} = $cont[0];
+            $mdRec->container_title($cont[0]);
         }
+
     }
+
+    return $mdRec;
 }
+
+my $mdRec = RefRec->new;
+if (test($items)) {
+    $mdRec = processSchemaOrg($items);
+}
+
 
 # Microdata from parsely-page meta tag JSON content.
 
-if (! test($entry{'author'})
-    && test($parsely_page_content)
-    && test($parsely_page_content->{'authors'})) {
-    if ((ref $parsely_page_content->{'authors'} // '') eq 'ARRAY') {
-        foreach my $author_str (@{$parsely_page_content->{'authors'}}) {
-            my $author = parse_author($author_str);
-            push @{$entry{'author'}}, $author;
+sub processParselyPage ($parsely_page_content) {
+    my $parselyPageRec = RefRec->new;
+
+    if (test($parsely_page_content->{'authors'})) {
+        if ((ref $parsely_page_content->{'authors'} // '') eq 'ARRAY') {
+            foreach my $author_str (@{$parsely_page_content->{'authors'}}) {
+                my $author = parse_author($author_str);
+                push @{$parselyPageRec->author}, $author;
+            }
+        }
+        else {
+            my $author = parse_author($parsely_page_content->{'authors'});
+            push @{$parselyPageRec->author}, $author;
+        }
+    }
+
+    if (test($parsely_page_content->{'title'})) {
+        $parselyPageRec->title($parsely_page_content->{'title'});
+    }
+
+    if (test($parsely_page_content->{'pub_date'})) {
+        try {
+            my $date = date_parse($parsely_page_content->{'pub_date'});
+            $parselyPageRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+
+    if ((ref $parsely_page_content->{'tags'} // '') eq 'ARRAY') {
+        foreach my $tag_str (@{$parsely_page_content->{'tags'}}) {
+            push @{$parselyPageRec->keyword}, $tag_str;
         }
     }
     else {
-        my $author = parse_author($parsely_page_content->{'authors'});
-        push @{$entry{'author'}}, $author;
+        my $tag_str = parse_author($parsely_page_content->{'tags'});
+        push @{$parselyPageRec->keyword}, $tag_str;
     }
+
+    return $parselyPageRec;
 }
+
+my $parselyPageRec = RefRec->new;
+if (test($parsely_page_content)) {
+    $parselyPageRec = processParselyPage($parsely_page_content);
+}
+
 
 # Schema.org microdata in JSON+LD in <script type="application/ld+json">.
 
-if (! test($entry{'issued'})
-    && test($schema_org_ld_json->{'dateCreated'})) {
+sub processSchemaOrgJsonLd ($schema_org_ld_json) {
+    my $schemaOrgJsonLd = RefRec->new;
 
-    try {
-        my $date = date_parse($schema_org_ld_json->{'dateCreated'});
-        $entry{'issued'} = date_conversion($date);
+    my $context;
+    if (! ((test($context = $schema_org_ld_json->{'@context'}))
+           && $context eq 'http://schema.org')) {
+        # Return early.
+        return $schemaOrgJsonLd;
     }
-    catch {};
+
+    if (test($schema_org_ld_json->{'datePublish'})) {
+        try {
+            my $date = date_parse($schema_org_ld_json->{'datePublished'});
+            $schemaOrgJsonLd->issued(date_conversion($date));
+        }
+        catch {};
+    }
+    elsif (test($schema_org_ld_json->{'dateCreated'})) {
+        try {
+            my $date = date_parse($schema_org_ld_json->{'dateCreated'});
+            $schemaOrgJsonLd->issued(date_conversion($date));
+        }
+        catch {};
+    }
+
+
+
+    return $schemaOrgJsonLd;
 }
 
-my $dc_date = $dc->date;
-if (! test($entry{'issued'})
-    && test($dc_date)
-    && test($dc_date->content)) {
-    #print STDERR "raw date: ", $dc_date->content, "\n";
-    try {
-        my $date = date_parse($dc_date->content);
-        $entry{'issued'} = date_conversion($date);
+my $schemaOrgJsonLd = processSchemaOrgJsonLd($schema_org_ld_json);
+
+
+# arXiv.org metadata.
+
+sub processArXivMeta ($html_headers) {
+    my $arXivRec = RefRec->new;
+
+    my $citation_date_str = $html_headers->header('X-Meta-Citation-Online-Date');
+    if (test($citation_date_str)) {
+        try {
+            my $date = date_parse($citation_date_str);
+            $arXivRec->issued(date_conversion($date));
+        }
+        catch {};
     }
-    catch {};
+    elsif (test($citation_date_str
+                = $html_headers->header('X-Meta-Citation-Date'))) {
+        try {
+            my $date = date_parse($citation_date_str);
+            $arXivRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+
+    my $citation_title = $html_headers->header('X-Meta-Citation-Title');
+    if (test($citation_title)) {
+        $arXivRec->title(trim(decode_entities($citation_title)));
+    }
+
+    my @authors = $html_headers->header('X-Meta-Citation-Author');
+    if (test(\@authors)) {
+        for my $author_str (@authors) {
+            my $author = parse_author($author_str);
+            push @{$arXivRec->author}, $author;
+        }
+    }
+
+    my $pdf_url = $html_headers->header('X-Meta-Citation-Pdf-Url');
+    if (test($pdf_url)) {
+        $arXivRec->URL(trim(decode_entities($pdf_url)));
+    }
+
+    $arXivRec->type('article');
+
+    return $arXivRec;
 }
+
+my $arXivRec = processArXivMeta($html_headers);
+
+
+# DublinCore date.
+
+## TODO: Reinstate and improve.
+# my $dc_date = $dc->date;
+# if (! test($entry{'issued'})
+#     && test($dc_date)
+#     && test($dc_date->content)) {
+#     #print STDERR "raw date: ", $dc_date->content, "\n";
+#     try {
+#         my $date = date_parse($dc_date->content);
+#         $entry{'issued'} = date_conversion($date);
+#     }
+#     catch {};
+# }
 
 # HTML headers parsing.
 
-if (! exists $entry{'author'}
-    && test($html_headers->header('X-Meta-Author'))) {
-    my $author = parse_author($html_headers->header('X-Meta-Author'));
-    push @{$entry{'author'}}, $author;
-}
+sub processHtmlHeaderMeta ($html_headers) {
+    my $htmlHeaderRec = RefRec->new;
 
-my $html_meta_date_str = $html_headers->header('X-Meta-Date');
-if (! exists $entry{'issued'}
-    && test($html_meta_date_str)) {
-    #print STDERR "date: >", $html_meta_date_str, "<\n";
-
-    try {
-        my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
-        $entry{'issued'} = date_conversion($date);
+    if (test($html_headers->header('X-Meta-Author'))) {
+        my $author = parse_author($html_headers->header('X-Meta-Author'));
+        push @{$htmlHeaderRec->author}, $author;
     }
-    catch {};
-}
 
-$html_meta_date_str = $html_headers->header('X-Meta-Created');
-if (! exists $entry{'issued'}
-    && test($html_meta_date_str)) {
-    #print STDERR "date: >", $html_meta_date_str, "<\n";
+    my $html_meta_date_str = $html_headers->header('X-Meta-Date');
+    if (test($html_meta_date_str)) {
+        #print STDERR "date: >", $html_meta_date_str, "<\n";
 
-    try {
-        my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
-        $entry{'issued'} = date_conversion($date);
+        try {
+            my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
+            $htmlHeaderRec->issued(date_conversion($date));
+        }
+        catch {};
     }
-    catch {};
-}
 
-$html_meta_date_str = $tree->findvalue(
-    '//head/meta[lower-case(@property)="published-date"]/@content');
-if (! exists $entry{'issued'}
-    && test($html_meta_date_str)) {
-    #print STDERR "date: >", $html_meta_date_str, "<\n";
+    $html_meta_date_str = $html_headers->header('X-Meta-Created');
+    if (! test($htmlHeaderRec->issued)
+        && test($html_meta_date_str)) {
+        #print STDERR "date: >", $html_meta_date_str, "<\n";
 
-    try {
-        my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
-        $entry{'issued'} = date_conversion($date);
+        try {
+            my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
+            $htmlHeaderRec->issued(date_conversion($date));
+        }
+        catch {};
     }
-    catch {};
+
+    $html_meta_date_str = $tree->findvalue(
+        '//head/meta[lower-case(@property)="published-date"]/@content');
+    if (! test($htmlHeaderRec->issued)
+        && test($html_meta_date_str)) {
+        #print STDERR "date: >", $html_meta_date_str, "<\n";
+
+        try {
+            my $date = DateTime::Format::HTTP->parse_datetime($html_meta_date_str);
+            $htmlHeaderRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+
+    my $html_meta_keywords = $html_headers->header('X-Meta-Keywords');
+    if (test($html_meta_keywords)) {
+        trim($html_meta_keywords);
+        $html_meta_keywords =~ s/(\s)\s*/$1/g;
+        $htmlHeaderRec->keyword($html_meta_keywords);
+    }
+
+    if (test($html_headers->header('X-Meta-Description'))) {
+        $htmlHeaderRec->abstract(trim($html_headers->header('X-Meta-Description')));
+    }
+
+    return $htmlHeaderRec;
 }
 
-my $html_meta_keywords = $html_headers->header('X-Meta-Keywords');
-if (! exists $entry{'keyword'}
-    && test($html_meta_keywords)) {
-    trim($html_meta_keywords);
-    $html_meta_keywords =~ s/(\s)\s*/$1/g;
-    $entry{'keyword'} = $html_meta_keywords;
-}
-
-if (! test($entry{'abstract'})
-    && test($html_headers->header('X-Meta-Description'))) {
-    $entry{'abstract'} = trim($html_headers->header('X-Meta-Description'));
+my $htmlHeaderRec = RefRec->new;
+if (defined $html_headers) {
+    $htmlHeaderRec = processHtmlHeaderMeta($html_headers);
 }
 
 
+my %entry = ();
+$entry{'title'} = choose(
+    $mdRec->title, $ogRec->title, $arXivRec->title, $schemaOrgJsonLd->title,
+    $parselyPageRec->title, $htmlHeaderRec->title);
+$entry{'type'} = choose(
+    $mdRec->type, $ogRec->type, $arXivRec->type, $schemaOrgJsonLd->type,
+    $parselyPageRec->type, $htmlHeaderRec->type);
+$entry{'author'} = choose(
+    $mdRec->author, $ogRec->author, $arXivRec->author, $schemaOrgJsonLd->author,
+    $parselyPageRec->author, $htmlHeaderRec->author);
 $entry{'accessed'} = date_conversion(DateTime->today());
+$entry{'issued'} = choose(
+    $mdRec->issued, $ogRec->issued, $arXivRec->issued,
+    $schemaOrgJsonLd->issued, $parselyPageRec->issued,
+    $htmlHeaderRec->issued);
+$entry{'container-title'} = choose(
+    $mdRec->container_title, $ogRec->container_title,
+    $schemaOrgJsonLd->container_title, $parselyPageRec->container_title,
+    $htmlHeaderRec->container_title);
+$entry{'publisher'} = choose(
+    $mdRec->publisher, $ogRec->publisher,
+    $schemaOrgJsonLd->publisher, $parselyPageRec->publisher,
+    $htmlHeaderRec->publisher);
+$entry{'publisher-place'} = choose(
+    $mdRec->publisher_place, $ogRec->publisher_place,
+    $schemaOrgJsonLd->publisher_place, $parselyPageRec->publisher_place,
+    $htmlHeaderRec->publisher_place);
+$entry{'volume'} = choose(
+    $mdRec->volume, $ogRec->volume, $schemaOrgJsonLd->volume,
+    $parselyPageRec->volume, $htmlHeaderRec->volume);
+$entry{'issue'} = choose(
+    $mdRec->issue, $ogRec->issue, $schemaOrgJsonLd->issue,
+    $parselyPageRec->issue, $htmlHeaderRec->issue);
+$entry{'page'} = choose(
+    $mdRec->page, $ogRec->page, $schemaOrgJsonLd->page, $parselyPageRec->page,
+    $htmlHeaderRec->page);
+$entry{'abstract'} = choose(
+    $mdRec->abstract, $ogRec->abstract,
+    $schemaOrgJsonLd->abstract, $parselyPageRec->abstract,
+    $htmlHeaderRec->abstract);
+$entry{'keyword'} = choose(
+    $mdRec->keyword, $ogRec->keyword, $schemaOrgJsonLd->keyword,
+    $parselyPageRec->keyword, $htmlHeaderRec->keyword);
+$entry{'ISBN'} = choose(
+    $mdRec->ISBN, $ogRec->ISBN, $schemaOrgJsonLd->ISBN, $parselyPageRec->ISBN,
+    $htmlHeaderRec->ISBN);
+$entry{'ISSN'} = choose(
+    $mdRec->ISSN, $ogRec->ISSN, $schemaOrgJsonLd->ISSN, $parselyPageRec->ISSN,
+    $htmlHeaderRec->ISSN);
+$entry{'DOI'} = choose(
+    $mdRec->DOI, $ogRec->DOI, $schemaOrgJsonLd->DOI, $parselyPageRec->DOI,
+    $htmlHeaderRec->DOI);
+$entry{'URL'} = choose(
+    $mdRec->URL, $ogRec->URL, $arXivRec->URL, $schemaOrgJsonLd->URL, $parselyPageRec->URL,
+    $htmlHeaderRec->URL, $ARGV[0]);
 
+# Remove undef values from entry.
+while (my ($key, $val) = each %entry) {
+    delete $entry{$key} if not defined $val or not test($val);
+}
+
+print STDERR "Dump: ", Dumper(\%entry), "\n";
 print "\n", YAML::Dump([\%entry]), "\n...\n";
