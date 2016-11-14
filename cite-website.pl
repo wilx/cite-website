@@ -10,6 +10,7 @@ use warnings;
 use criticism;
 
 use Moose;
+use namespace::autoclean;
 use MooseX::StrictConstructor;
 
 has 'id' => (is => 'rw', isa => 'Maybe[Str]');
@@ -19,13 +20,9 @@ has 'author' => (is => 'rw', isa => 'Maybe[ArrayRef[HashRef[Str]]]',
     default => sub { return []; });
 has 'abstract' => (is => 'rw', isa => 'Maybe[Str]');
 has 'keyword' => (is => 'rw', isa => 'Maybe[Str]');
-sub container_title;
-has 'container-title' => (is => 'rw', isa => 'Maybe[Str]',
-    reader => &container_title, writer => &container_title);
+has 'container_title' => (is => 'rw', isa => 'Maybe[Str]');
 has 'publisher' => (is => 'rw', isa => 'Maybe[Str]');
-sub publisher_place;
-has 'publisher-place' => (is => 'rw', isa => 'Maybe[Str]',
-    reader => &publisher_place, writer => &publisher_place);
+has 'publisher_place' => (is => 'rw', isa => 'Maybe[Str]');
 has 'volume' => (is => 'rw', isa => 'Maybe[Str]');
 has 'issue' => (is => 'rw', isa => 'Maybe[Str]');
 has 'page' => (is => 'rw', isa => 'Maybe[Str]');
@@ -38,23 +35,9 @@ has 'ISSN' => (is => 'rw', isa => 'Maybe[Str]');
 has 'URL' => (is => 'rw', isa => 'Maybe[Str]');
 has 'DOI' => (is => 'rw', isa => 'Maybe[Str]');
 
-sub publisher_place {
-    my $self = shift;
-    if (scalar(@_) == 1) {
-        $self->{"publisher-place"} = shift;
-    }
-    return $self->{"name"};
-}
-
-sub container_title {
-    my $self = shift;
-    if (scalar(@_) == 1) {
-        $self->{"content-title"} = shift;
-    }
-    return $self->{"name"};
-}
-
 no Moose;
+__PACKAGE__->meta->make_immutable;
+1;
 
 
 package main;
@@ -216,10 +199,10 @@ sub test {
 
 sub choose {
     my @values = @_;
-    print STDERR "choose(", Dumper(\@values), ")\n";
+    #print STDERR "choose(", Dumper(\@values), ")\n";
     foreach my $val (@values) {
         if (test($val)) {
-            print STDERR "Choosing ", Dumper($val), "\n";
+            #print STDERR "Choosing ", Dumper($val), "\n";
             return $val;
         }
     }
@@ -267,20 +250,24 @@ sub date_conversion {
 sub parse_author {
     my ($text, $additional_name) = @_;
     my $author = {};
-
+    #print STDERR "Name: ", $text, "\n";
+    # Family name (comma) Given name
     if ($text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
+        #print STDERR "Family name, Given name\n";
         my $family = $1;
         my $given = $2;
         $author->{'family'} = $family;
         $author->{'given'} = $given;
     }
     elsif ($text =~ /^\s*((?:\S+\s+|\S+)+)\s+(\S+)\s*$/) {
+        #print STDERR "long name\n";
         my $family = $2;
         my $given = $1;
         $author->{'family'} = $family;
         $author->{'given'} = $given;
     }
     else {
+        #print STDERR "just name\n";
         $author->{'family'} = $text;
     }
 
@@ -525,8 +512,6 @@ sub processSchemaOrg($items) {
         }
     }
 
-
-
     my @md_articles = dpath(
         '//*/[key eq "type"'
         . ' && (value eq "http://schema.org/Article"'
@@ -537,7 +522,10 @@ sub processSchemaOrg($items) {
         . '     || value eq "http://schema.org/BlogPosting")]/..')
         ->match($items);
     if (test(@md_articles)) {
-        print STDERR "It looks like we have an instance of schema.org article.\n";
+        print STDERR "It looks like we have an instance of ", $md_articles[0]{'type'}, ".\n";
+    }
+    else {
+        return $mdRec;
     }
 
     #print STDERR "article entry:\n", Dumper(@md_articles), "\n";
@@ -578,8 +566,6 @@ sub processSchemaOrg($items) {
             $mdRec->volume($vol[0]);
         }
 
-
-
         my @cont = dpath('/isPartOf/*[0]/*/'
                          . '[key eq "type"'
                          . ' && value eq "http://schema.org/Periodical"]/'
@@ -588,6 +574,16 @@ sub processSchemaOrg($items) {
             $mdRec->container_title($cont[0]);
         }
 
+    }
+
+    my $type = $md_articles[0]{'type'};
+    if ($type eq 'http://schema.org/ScholarlyArticle') {
+        if (test($mdRec->container_title)) {
+            $mdRec->type('article-journal');
+        }
+        else {
+            $mdRec->type('article');
+        }
     }
 
     return $mdRec;
@@ -680,19 +676,22 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
     return $schemaOrgJsonLd;
 }
 
-my $schemaOrgJsonLd = processSchemaOrgJsonLd($schema_org_ld_json);
+my $schemaOrgJsonLd = RefRec->new;
+if (test($schema_org_ld_json)) {
+    my $schemaOrgJsonLd = processSchemaOrgJsonLd($schema_org_ld_json);
+}
 
 
-# arXiv.org metadata.
+# Citation HTML header meta element metadata.
 
-sub processArXivMeta ($html_headers) {
-    my $arXivRec = RefRec->new;
+sub processHtmlHeaderMetaCitation ($html_headers) {
+    my $htmlMetaCitationRec = RefRec->new;
 
     my $citation_date_str = $html_headers->header('X-Meta-Citation-Online-Date');
     if (test($citation_date_str)) {
         try {
             my $date = date_parse($citation_date_str);
-            $arXivRec->issued(date_conversion($date));
+            $htmlMetaCitationRec->issued(date_conversion($date));
         }
         catch {};
     }
@@ -700,35 +699,84 @@ sub processArXivMeta ($html_headers) {
                 = $html_headers->header('X-Meta-Citation-Date'))) {
         try {
             my $date = date_parse($citation_date_str);
-            $arXivRec->issued(date_conversion($date));
+            $htmlMetaCitationRec->issued(date_conversion($date));
         }
         catch {};
     }
 
     my $citation_title = $html_headers->header('X-Meta-Citation-Title');
     if (test($citation_title)) {
-        $arXivRec->title(trim(decode_entities($citation_title)));
+        $htmlMetaCitationRec->title(trim(decode_entities($citation_title)));
     }
 
     my @authors = $html_headers->header('X-Meta-Citation-Author');
     if (test(\@authors)) {
         for my $author_str (@authors) {
             my $author = parse_author($author_str);
-            push @{$arXivRec->author}, $author;
+            push @{$htmlMetaCitationRec->author}, $author;
         }
     }
 
     my $pdf_url = $html_headers->header('X-Meta-Citation-Pdf-Url');
     if (test($pdf_url)) {
-        $arXivRec->URL(trim(decode_entities($pdf_url)));
+        $htmlMetaCitationRec->URL(trim(decode_entities($pdf_url)));
     }
 
-    $arXivRec->type('article');
+    my $journal = $html_headers->header('X-Meta-Citation-Journal-Title');
+    if (test($journal)) {
+        print STDERR "journal title: ", $journal, "\n";
+        $htmlMetaCitationRec->container_title(trim(decode_entities($journal)));
+        print STDERR "journal title after: ", $htmlMetaCitationRec->container_title, "\n";
+    }
 
-    return $arXivRec;
+    my $volume = $html_headers->header('X-Meta-Citation-Volume');
+    if (test($volume)) {
+        $htmlMetaCitationRec->volume(trim(decode_entities($volume)));
+    }
+
+    my $issue = $html_headers->header('X-Meta-Citation-Issue');
+    if (test($issue)) {
+        $htmlMetaCitationRec->issue(trim(decode_entities($issue)));
+    }
+
+    my $ISSN = $html_headers->header('X-Meta-Citation-ISSN');
+    if (test($issue)) {
+        $htmlMetaCitationRec->ISSN(trim(decode_entities($ISSN)));
+    }
+
+    my $first_page = trim(
+        decode_entities(
+            $html_headers->header('X-Meta-Citation-FirstPage') // ''));
+    my $last_page = trim(
+        decode_entities(
+            $html_headers->header('X-Meta-Citation-LastPage') // ''));
+    if (test($first_page)) {
+        if (test($last_page)) {
+            $htmlMetaCitationRec->page("$first_page-$last_page");
+        }
+        else {
+            $htmlMetaCitationRec->page($first_page);
+        }
+    }
+
+    my $doi = $html_headers->header('X-Meta-Citation-DOI');
+    if (test($doi)) {
+        $htmlMetaCitationRec->DOI(trim(decode_entities($doi)));
+    }
+
+    if (test($htmlMetaCitationRec->container_title)
+        && test($htmlMetaCitationRec->volume)
+        && test($htmlMetaCitationRec->issue)) {
+        $htmlMetaCitationRec->type('article-journal');
+    }
+    else {
+        $htmlMetaCitationRec->type('article');
+    }
+
+    return $htmlMetaCitationRec;
 }
 
-my $arXivRec = processArXivMeta($html_headers);
+my $htmlMetaCitationRec = processHtmlHeaderMetaCitation($html_headers);
 
 
 # DublinCore date.
@@ -814,23 +862,23 @@ if (defined $html_headers) {
 
 my %entry = ();
 $entry{'title'} = choose(
-    $mdRec->title, $ogRec->title, $arXivRec->title, $schemaOrgJsonLd->title,
+    $mdRec->title, $ogRec->title, $htmlMetaCitationRec->title, $schemaOrgJsonLd->title,
     $parselyPageRec->title, $htmlHeaderRec->title);
 $entry{'type'} = choose(
-    $mdRec->type, $ogRec->type, $arXivRec->type, $schemaOrgJsonLd->type,
+    $mdRec->type, $htmlMetaCitationRec->type, $ogRec->type, $schemaOrgJsonLd->type,
     $parselyPageRec->type, $htmlHeaderRec->type);
 $entry{'author'} = choose(
-    $mdRec->author, $ogRec->author, $arXivRec->author, $schemaOrgJsonLd->author,
+    $htmlMetaCitationRec->author, $mdRec->author, $schemaOrgJsonLd->author, $ogRec->author,
     $parselyPageRec->author, $htmlHeaderRec->author);
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
-    $mdRec->issued, $ogRec->issued, $arXivRec->issued,
+    $mdRec->issued, $ogRec->issued, $htmlMetaCitationRec->issued,
     $schemaOrgJsonLd->issued, $parselyPageRec->issued,
     $htmlHeaderRec->issued);
 $entry{'container-title'} = choose(
-    $mdRec->container_title, $ogRec->container_title,
-    $schemaOrgJsonLd->container_title, $parselyPageRec->container_title,
-    $htmlHeaderRec->container_title);
+    $htmlMetaCitationRec->container_title,  $mdRec->container_title,
+    $ogRec->container_title, $schemaOrgJsonLd->container_title,
+    $parselyPageRec->container_title, $htmlHeaderRec->container_title);
 $entry{'publisher'} = choose(
     $mdRec->publisher, $ogRec->publisher,
     $schemaOrgJsonLd->publisher, $parselyPageRec->publisher,
@@ -840,13 +888,13 @@ $entry{'publisher-place'} = choose(
     $schemaOrgJsonLd->publisher_place, $parselyPageRec->publisher_place,
     $htmlHeaderRec->publisher_place);
 $entry{'volume'} = choose(
-    $mdRec->volume, $ogRec->volume, $schemaOrgJsonLd->volume,
+    $mdRec->volume, $htmlMetaCitationRec->volume, $ogRec->volume, $schemaOrgJsonLd->volume,
     $parselyPageRec->volume, $htmlHeaderRec->volume);
 $entry{'issue'} = choose(
-    $mdRec->issue, $ogRec->issue, $schemaOrgJsonLd->issue,
+    $mdRec->issue, $htmlMetaCitationRec->issue, $ogRec->issue, $schemaOrgJsonLd->issue,
     $parselyPageRec->issue, $htmlHeaderRec->issue);
 $entry{'page'} = choose(
-    $mdRec->page, $ogRec->page, $schemaOrgJsonLd->page, $parselyPageRec->page,
+    $mdRec->page, $htmlMetaCitationRec->page, $ogRec->page, $schemaOrgJsonLd->page, $parselyPageRec->page,
     $htmlHeaderRec->page);
 $entry{'abstract'} = choose(
     $mdRec->abstract, $ogRec->abstract,
@@ -859,18 +907,18 @@ $entry{'ISBN'} = choose(
     $mdRec->ISBN, $ogRec->ISBN, $schemaOrgJsonLd->ISBN, $parselyPageRec->ISBN,
     $htmlHeaderRec->ISBN);
 $entry{'ISSN'} = choose(
-    $mdRec->ISSN, $ogRec->ISSN, $schemaOrgJsonLd->ISSN, $parselyPageRec->ISSN,
+    $mdRec->ISSN, $htmlMetaCitationRec->ISSN, $ogRec->ISSN, $schemaOrgJsonLd->ISSN, $parselyPageRec->ISSN,
     $htmlHeaderRec->ISSN);
 $entry{'DOI'} = choose(
-    $mdRec->DOI, $ogRec->DOI, $schemaOrgJsonLd->DOI, $parselyPageRec->DOI,
+    $mdRec->DOI, $htmlMetaCitationRec->DOI, $ogRec->DOI, $schemaOrgJsonLd->DOI, $parselyPageRec->DOI,
     $htmlHeaderRec->DOI);
 $entry{'URL'} = choose(
-    $mdRec->URL, $ogRec->URL, $arXivRec->URL, $schemaOrgJsonLd->URL, $parselyPageRec->URL,
+    $mdRec->URL, $ogRec->URL, $htmlMetaCitationRec->URL, $schemaOrgJsonLd->URL, $parselyPageRec->URL,
     $htmlHeaderRec->URL, $ARGV[0]);
 
 # Remove undef values from entry.
 while (my ($key, $val) = each %entry) {
-    delete $entry{$key} if not defined $val or not test($val);
+    delete $entry{$key} if not test($val);
 }
 
 print STDERR "Dump: ", Dumper(\%entry), "\n";
