@@ -498,17 +498,16 @@ sub processSchemaOrg($items) {
                         ->match($md_author);
 
                     my $author = parse_author($authors[0], $additionalName[0]);
-                    # if (! test($id)) {
-                    #     $id = $author->{'family'};
-                    #     $id =~ s/\W//g;
-                    #     $id = lc $id;
-                    # }
                     push @{$mdRec->author}, $author;
                 }
             }
+            elsif (ref $md_author eq ''
+                   && test($md_author)) {
+                my $author = parse_author($md_author);
+                push @{$mdRec->author}, $author;
+            }
             else {
-                print STDERR "Found author but not type http://schema.org/Person: ",
-                $md_author, "\n";
+                print STDERR "Could not decode author data: ", $md_author, "\n";
             }
         }
     }
