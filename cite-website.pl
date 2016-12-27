@@ -21,6 +21,7 @@ has 'author' => (is => 'rw', isa => 'Maybe[ArrayRef[HashRef[Str]]]',
 has 'abstract' => (is => 'rw', isa => 'Maybe[Str]');
 has 'keyword' => (is => 'rw', isa => 'Maybe[Str]');
 has 'container_title' => (is => 'rw', isa => 'Maybe[Str]');
+has 'collection_title' => (is => 'rw', isa => 'Maybe[Str]');
 has 'publisher' => (is => 'rw', isa => 'Maybe[Str]');
 has 'publisher_place' => (is => 'rw', isa => 'Maybe[Str]');
 has 'volume' => (is => 'rw', isa => 'Maybe[Str]');
@@ -779,6 +780,59 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
 my $htmlMetaCitationRec = processHtmlHeaderMetaCitation($html_headers);
 
 
+# Bepress Citation HTML header meta element metadata.
+
+sub processHtmlHeaderBepressMetaCitation ($html_headers) {
+    my $htmlMetaCitationRec = RefRec->new;
+
+    my $citation_date_str = $html_headers->header('X-Meta-Bepress-Citation-Online-Date');
+    if (test($citation_date_str)) {
+        try {
+            my $date = date_parse($citation_date_str);
+            $htmlMetaCitationRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+    elsif (test($citation_date_str
+                = $html_headers->header('X-Meta-Bepress-Citation-Date'))) {
+        try {
+            my $date = date_parse($citation_date_str);
+            $htmlMetaCitationRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+
+    my $citation_title = $html_headers->header('X-Meta-Bepress-Citation-Title');
+    if (test($citation_title)) {
+        $htmlMetaCitationRec->title(trim(decode_entities($citation_title)));
+    }
+
+    my @authors = $html_headers->header('X-Meta-Bepress-Citation-Author');
+    if (test(\@authors)) {
+        for my $author_str (@authors) {
+            my $author = parse_author($author_str);
+            push @{$htmlMetaCitationRec->author}, $author;
+        }
+    }
+
+    my $pdf_url = $html_headers->header('X-Meta-Bepress-Citation-Pdf-Url');
+    if (test($pdf_url)) {
+        $htmlMetaCitationRec->URL(trim(decode_entities($pdf_url)));
+    }
+
+    my $citation_series = $html_headers->header('X-Meta-Bepress-Citation-Series-Title');
+    if (test($citation_series)) {
+        $htmlMetaCitationRec->collection_title(trim(decode_entities($citation_series)));
+    }
+
+    $htmlMetaCitationRec->type('article');
+
+    return $htmlMetaCitationRec;
+}
+
+my $htmlMetaBepressCitationRec = processHtmlHeaderBepressMetaCitation($html_headers);
+
+
 # DublinCore date.
 
 ## TODO: Reinstate and improve.
@@ -863,30 +917,35 @@ if (defined $html_headers) {
 my %entry = ();
 $entry{'title'} = choose(
     $mdRec->title, $ogRec->title, $htmlMetaCitationRec->title, $schemaOrgJsonLd->title,
-    $parselyPageRec->title, $htmlHeaderRec->title);
+    $parselyPageRec->title, $htmlMetaBepressCitationRec->title, $htmlHeaderRec->title);
 $entry{'type'} = choose(
     $mdRec->type, $htmlMetaCitationRec->type, $ogRec->type, $schemaOrgJsonLd->type,
-    $parselyPageRec->type, $htmlHeaderRec->type);
+    $parselyPageRec->type, $htmlMetaBepressCitationRec->type, $htmlHeaderRec->type);
 $entry{'author'} = choose(
     $htmlMetaCitationRec->author, $mdRec->author, $schemaOrgJsonLd->author, $ogRec->author,
-    $parselyPageRec->author, $htmlHeaderRec->author);
+    $parselyPageRec->author, $htmlMetaBepressCitationRec->author, $htmlHeaderRec->author);
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
     $mdRec->issued, $ogRec->issued, $htmlMetaCitationRec->issued,
     $schemaOrgJsonLd->issued, $parselyPageRec->issued,
-    $htmlHeaderRec->issued);
+    $htmlMetaBepressCitationRec->issued, $htmlHeaderRec->issued);
 $entry{'container-title'} = choose(
     $htmlMetaCitationRec->container_title,  $mdRec->container_title,
     $ogRec->container_title, $schemaOrgJsonLd->container_title,
     $parselyPageRec->container_title, $htmlHeaderRec->container_title);
+$entry{'collection-title'} = choose(
+    $htmlMetaCitationRec->collection_title,  $mdRec->collection_title,
+    $ogRec->collection_title, $schemaOrgJsonLd->collection_title,
+    $parselyPageRec->collection_title, $htmlMetaBepressCitationRec->collection_title,
+    $htmlHeaderRec->collection_title);
 $entry{'publisher'} = choose(
     $mdRec->publisher, $ogRec->publisher,
     $schemaOrgJsonLd->publisher, $parselyPageRec->publisher,
-    $htmlHeaderRec->publisher);
+    $htmlMetaBepressCitationRec->publisher, $htmlHeaderRec->publisher);
 $entry{'publisher-place'} = choose(
     $mdRec->publisher_place, $ogRec->publisher_place,
     $schemaOrgJsonLd->publisher_place, $parselyPageRec->publisher_place,
-    $htmlHeaderRec->publisher_place);
+    $htmlMetaBepressCitationRec->publisher_place, $htmlHeaderRec->publisher_place);
 $entry{'volume'} = choose(
     $mdRec->volume, $htmlMetaCitationRec->volume, $ogRec->volume, $schemaOrgJsonLd->volume,
     $parselyPageRec->volume, $htmlHeaderRec->volume);
@@ -914,7 +973,7 @@ $entry{'DOI'} = choose(
     $htmlHeaderRec->DOI);
 $entry{'URL'} = choose(
     $mdRec->URL, $ogRec->URL, $htmlMetaCitationRec->URL, $schemaOrgJsonLd->URL, $parselyPageRec->URL,
-    $htmlHeaderRec->URL, $ARGV[0]);
+    $htmlMetaBepressCitationRec->URL, $htmlHeaderRec->URL, $ARGV[0]);
 
 # Remove undef values from entry.
 while (my ($key, $val) = each %entry) {
