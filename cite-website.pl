@@ -115,8 +115,12 @@ if (test($og)) {
 
 # Microdata parsing.
 
-my $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
-my $items = $microdata->items;
+my ($microdata, $items);
+try {
+    $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
+    $items = $microdata->items;
+}
+catch {};
 #print STDERR "microdata as JSON:\n", Dumper($items), "\n";
 if (test($items)) {
     print STDERR "It looks like we have some microdata in HTML.\n";
