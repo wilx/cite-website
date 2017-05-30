@@ -732,9 +732,9 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
 
     my $journal = $html_headers->header('X-Meta-Citation-Journal-Title');
     if (test($journal)) {
-        print STDERR "journal title: ", $journal, "\n";
+        #print STDERR "journal title: ", $journal, "\n";
         $htmlMetaCitationRec->container_title(trim(decode_entities($journal)));
-        print STDERR "journal title after: ", $htmlMetaCitationRec->container_title, "\n";
+        #print STDERR "journal title after: ", $htmlMetaCitationRec->container_title, "\n";
     }
 
     my $volume = $html_headers->header('X-Meta-Citation-Volume');
