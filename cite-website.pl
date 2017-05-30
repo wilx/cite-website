@@ -185,8 +185,12 @@ my $lang;
 
 # Parse DublinCore meta headers.
 
-my $dc = HTML::DublinCore->new($htmldoc);
-#print STDERR "DublinCore:\n", Dumper($dc), "\n";
+my $dc;
+try {
+    $dc = HTML::DublinCore->new($htmldoc);
+    #print STDERR "DublinCore:\n", Dumper($dc), "\n";
+} catch {};
+
 
 # Fill in %entry.
 
@@ -836,20 +840,66 @@ sub processHtmlHeaderBepressMetaCitation ($html_headers) {
 my $htmlMetaBepressCitationRec = processHtmlHeaderBepressMetaCitation($html_headers);
 
 
-# DublinCore date.
+# DublinCore metadata.
 
-## TODO: Reinstate and improve.
-# my $dc_date = $dc->date;
-# if (! test($entry{'issued'})
-#     && test($dc_date)
-#     && test($dc_date->content)) {
-#     #print STDERR "raw date: ", $dc_date->content, "\n";
-#     try {
-#         my $date = date_parse($dc_date->content);
-#         $entry{'issued'} = date_conversion($date);
-#     }
-#     catch {};
-# }
+sub processDublinCoreHtml ($dc) {
+    print STDERR "DC object:\n", Dumper($dc), "\n";
+
+    my $dcRec = RefRec->new;
+
+    my $title = $dc->element('Title');
+    print STDERR "title: ", Dumper($title), "\n";
+    if (test($title) && test($title->content)) {
+        $dcRec->title($title->content);
+    }
+
+    if (test($dc->element('Contributor'))) {
+        for my $author ($dc->element('Contributor')) {
+            push @{$dcRec->author}, parse_author($author->content);
+        }
+    } elsif (test($dc->element('Creator'))) {
+        for my $author ($dc->element('Creator')) {
+            push @{$dcRec->author}, parse_author($author->content);
+        }
+    }
+
+    my $date;
+    if (test($date = $dc->element('Date'))
+        && test($date = $date->content)) {
+        $date = date_parse($date);
+        $dcRec->issued(date_conversion($date));
+    }
+
+    my $identifier = $dc->element('Identifier');
+    if (test($identifier) && test($identifier = $identifier->content)
+        # The follwing regex is taken from SO answer
+        # <https://stackoverflow.com/a/10324802/341065>.
+        && $identifier =~ /\b(10[.][0-9]{4,}(?:[.][0-9]+)*\/(?:(?!["&\'<>])\S)+)\b/) {
+        $dcRec->DOI($identifier);
+    }
+    elsif (test($identifier) && $identifier =~ /^https?/) {
+        $dcRec->URL($identifier);
+    }
+
+    my $publisher = $dc->element('Publisher');
+    if (test($publisher) && test($publisher = $publisher->content)) {
+        $dcRec->publisher($publisher);
+    }
+
+    my $description = $dc->element('Description');
+    if (test($description) && test($description = $description->content)) {
+        $dcRec->abstract($description);
+    }
+
+    print STDERR "DublinCore metadata:\n", Dumper($dcRec), "\n";
+    return $dcRec;
+}
+
+my $dcRec = RefRec->new;
+if (test($dc)) {
+    $dcRec = processDublinCoreHtml($dc);
+}
+
 
 # HTML headers parsing.
 
@@ -918,18 +968,21 @@ if (defined $html_headers) {
 
 
 my %entry = ();
+
 $entry{'title'} = choose(
-    $mdRec->title, $ogRec->title, $htmlMetaCitationRec->title, $schemaOrgJsonLd->title,
-    $parselyPageRec->title, $htmlMetaBepressCitationRec->title, $htmlHeaderRec->title);
+    $mdRec->title, $ogRec->title, $dcRec->title, $htmlMetaCitationRec->title,
+    $schemaOrgJsonLd->title, $parselyPageRec->title,
+    $htmlMetaBepressCitationRec->title, $htmlHeaderRec->title);
 $entry{'type'} = choose(
     $mdRec->type, $htmlMetaCitationRec->type, $ogRec->type, $schemaOrgJsonLd->type,
     $parselyPageRec->type, $htmlMetaBepressCitationRec->type, $htmlHeaderRec->type);
 $entry{'author'} = choose(
-    $htmlMetaCitationRec->author, $mdRec->author, $schemaOrgJsonLd->author, $ogRec->author,
-    $parselyPageRec->author, $htmlMetaBepressCitationRec->author, $htmlHeaderRec->author);
+    $dcRec->author, $htmlMetaCitationRec->author, $mdRec->author,
+    $schemaOrgJsonLd->author, $ogRec->author, $parselyPageRec->author,
+    $htmlMetaBepressCitationRec->author, $htmlHeaderRec->author);
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
-    $mdRec->issued, $ogRec->issued, $htmlMetaCitationRec->issued,
+    $dcRec->issued, $mdRec->issued, $ogRec->issued, $htmlMetaCitationRec->issued,
     $schemaOrgJsonLd->issued, $parselyPageRec->issued,
     $htmlMetaBepressCitationRec->issued, $htmlHeaderRec->issued);
 $entry{'container-title'} = choose(
@@ -942,7 +995,7 @@ $entry{'collection-title'} = choose(
     $parselyPageRec->collection_title, $htmlMetaBepressCitationRec->collection_title,
     $htmlHeaderRec->collection_title);
 $entry{'publisher'} = choose(
-    $mdRec->publisher, $ogRec->publisher,
+    $dcRec->publisher, $mdRec->publisher, $ogRec->publisher,
     $schemaOrgJsonLd->publisher, $parselyPageRec->publisher,
     $htmlMetaBepressCitationRec->publisher, $htmlHeaderRec->publisher);
 $entry{'publisher-place'} = choose(
@@ -959,7 +1012,7 @@ $entry{'page'} = choose(
     $mdRec->page, $htmlMetaCitationRec->page, $ogRec->page, $schemaOrgJsonLd->page, $parselyPageRec->page,
     $htmlHeaderRec->page);
 $entry{'abstract'} = choose(
-    $mdRec->abstract, $ogRec->abstract,
+    $dcRec->abstract, $mdRec->abstract, $ogRec->abstract,
     $schemaOrgJsonLd->abstract, $parselyPageRec->abstract,
     $htmlHeaderRec->abstract);
 $entry{'keyword'} = choose(
@@ -972,11 +1025,12 @@ $entry{'ISSN'} = choose(
     $mdRec->ISSN, $htmlMetaCitationRec->ISSN, $ogRec->ISSN, $schemaOrgJsonLd->ISSN, $parselyPageRec->ISSN,
     $htmlHeaderRec->ISSN);
 $entry{'DOI'} = choose(
-    $mdRec->DOI, $htmlMetaCitationRec->DOI, $ogRec->DOI, $schemaOrgJsonLd->DOI, $parselyPageRec->DOI,
-    $htmlHeaderRec->DOI);
+    $dcRec->DOI, $mdRec->DOI, $htmlMetaCitationRec->DOI, $ogRec->DOI,
+    $schemaOrgJsonLd->DOI, $parselyPageRec->DOI, $htmlHeaderRec->DOI);
 $entry{'URL'} = choose(
-    $mdRec->URL, $ogRec->URL, $htmlMetaCitationRec->URL, $schemaOrgJsonLd->URL, $parselyPageRec->URL,
-    $htmlMetaBepressCitationRec->URL, $htmlHeaderRec->URL, $ARGV[0]);
+    $mdRec->URL, $ogRec->URL, $htmlMetaCitationRec->URL, $schemaOrgJsonLd->URL,
+    $parselyPageRec->URL, $htmlMetaBepressCitationRec->URL, $htmlHeaderRec->URL,
+    $dcRec->URL, $ARGV[0]);
 
 # Remove undef values from entry.
 while (my ($key, $val) = each %entry) {
