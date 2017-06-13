@@ -906,6 +906,10 @@ if (test($dc)) {
 sub processHtmlHeaderMeta ($html_headers) {
     my $htmlHeaderRec = RefRec->new;
 
+    if (test($html_headers->title)) {
+        $htmlHeaderRec->title(trim($html_headers->title));
+    }
+
     if (test($html_headers->header('X-Meta-Author'))) {
         my $author = parse_author($html_headers->header('X-Meta-Author'));
         push @{$htmlHeaderRec->author}, $author;
