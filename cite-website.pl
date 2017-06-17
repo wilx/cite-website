@@ -88,7 +88,7 @@ $ua->cookie_jar({});
 $ua->timeout(30);
 # Fake user agent identification is necessary. Some webs simply do not
 # respond if they think this is some kind of crawler they do not like.
-$ua->agent('Mozilla/5.0 (Windows NT 6.1; WOW64; rv:40.0) Gecko/20100101 Firefox/40.1');
+$ua->agent('Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:54.0) Gecko/20100101 Firefox/54.0');
 my $response = $ua->get($ARGV[0]);
 my $htmldoc;
 if ($response->is_success) {
