@@ -153,7 +153,7 @@ try {
             $schema_org_ld_json = JSON::decode_json($ld_json);
             print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
             if (!(test($schema_org_ld_json->{'@context'})
-                  && $schema_org_ld_json->{'@context'} eq 'http://schema.org'
+                  && $schema_org_ld_json->{'@context'} =~ m,^http://schema.org/?$,i
                   && test($schema_org_ld_json->{'@type'}))) {
                 $schema_org_ld_json = undef;
             }
@@ -216,6 +216,7 @@ sub choose {
         }
     }
 
+    #print STDERR "Not choosing any value, returning undef.\n";
     return;
 }
 
@@ -658,13 +659,8 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
     my $schemaOrgJsonLd = RefRec->new;
 
     my $context;
-    if (! ((test($context = $schema_org_ld_json->{'@context'}))
-           && $context eq 'http://schema.org')) {
-        # Return early.
-        return $schemaOrgJsonLd;
-    }
 
-    if (test($schema_org_ld_json->{'datePublish'})) {
+    if (test($schema_org_ld_json->{'datePublished'})) {
         try {
             my $date = date_parse($schema_org_ld_json->{'datePublished'});
             $schemaOrgJsonLd->issued(date_conversion($date));
@@ -679,14 +675,27 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
         catch {};
     }
 
+    if (test($schema_org_ld_json->{'author'})
+        && ref($schema_org_ld_json->{'author'}) eq 'ARRAY') {
+        my @authors = @{$schema_org_ld_json->{'author'}};
+        #print STDERR "Authors: ", Dumper(@authors), "\n";
+        if (test(\@authors)) {
+            for my $author_str (@authors) {
+                my $author = parse_author($author_str);
+                push @{$schemaOrgJsonLd->author}, $author;
+            }
+        }
 
+    }
+
+    #print STDERR "Parsed Schema.org JSON+LD record: ", Dumper($schemaOrgJsonLd), "\n";
 
     return $schemaOrgJsonLd;
 }
 
 my $schemaOrgJsonLd = RefRec->new;
 if (test($schema_org_ld_json)) {
-    my $schemaOrgJsonLd = processSchemaOrgJsonLd($schema_org_ld_json);
+    $schemaOrgJsonLd = processSchemaOrgJsonLd($schema_org_ld_json);
 }
 
 
@@ -1041,5 +1050,5 @@ while (my ($key, $val) = each %entry) {
     delete $entry{$key} if not test($val);
 }
 
-print STDERR "Dump: ", Dumper(\%entry), "\n";
+#print STDERR "Dump: ", Dumper(\%entry), "\n";
 print "\n", YAML::Dump([\%entry]), "\n...\n";
