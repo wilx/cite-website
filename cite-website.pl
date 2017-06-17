@@ -675,17 +675,24 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
         catch {};
     }
 
-    if (test($schema_org_ld_json->{'author'})
-        && ref($schema_org_ld_json->{'author'}) eq 'ARRAY') {
-        my @authors = @{$schema_org_ld_json->{'author'}};
-        #print STDERR "Authors: ", Dumper(@authors), "\n";
-        if (test(\@authors)) {
-            for my $author_str (@authors) {
-                my $author = parse_author($author_str);
-                push @{$schemaOrgJsonLd->author}, $author;
+    if (test($schema_org_ld_json->{'author'})) {
+        if (ref($schema_org_ld_json->{'author'}) eq 'ARRAY') {
+            my @authors = @{$schema_org_ld_json->{'author'}};
+            #print STDERR "Authors: ", Dumper(@authors), "\n";
+            if (test(\@authors)) {
+                for my $author_str (@authors) {
+                    my $author = parse_author($author_str);
+                    push @{$schemaOrgJsonLd->author}, $author;
+                }
             }
         }
+        else {
+            print STDERR "Schema.org in JSON+LD's author is not an array.\n";
+        }
+    }
 
+    if (test($schema_org_ld_json->{'keywords'})) {
+        $schemaOrgJsonLd->keyword((join ", ", @{$schema_org_ld_json->{'keywords'}}));
     }
 
     #print STDERR "Parsed Schema.org JSON+LD record: ", Dumper($schemaOrgJsonLd), "\n";
