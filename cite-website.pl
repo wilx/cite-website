@@ -152,7 +152,7 @@ try {
     if (test($ld_json)) {
         try {
             $schema_org_ld_json = JSON::decode_json(encode("UTF-8", $ld_json));
-            print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
+            #print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
             if (!(test($schema_org_ld_json->{'@context'})
                   && $schema_org_ld_json->{'@context'} =~ m,^http://schema.org/?$,i
                   && test($schema_org_ld_json->{'@type'}))) {
@@ -860,12 +860,11 @@ my $htmlMetaBepressCitationRec = processHtmlHeaderBepressMetaCitation($html_head
 # DublinCore metadata.
 
 sub processDublinCoreHtml ($dc) {
-    print STDERR "DC object:\n", Dumper($dc), "\n";
+    #print STDERR "DC object:\n", Dumper($dc), "\n";
 
     my $dcRec = RefRec->new;
 
     my $title = $dc->element('Title');
-    print STDERR "title: ", Dumper($title), "\n";
     if (test($title) && test($title->content)) {
         $dcRec->title($title->content);
     }
@@ -908,7 +907,7 @@ sub processDublinCoreHtml ($dc) {
         $dcRec->abstract($description);
     }
 
-    print STDERR "DublinCore metadata:\n", Dumper($dcRec), "\n";
+    #print STDERR "DublinCore metadata:\n", Dumper($dcRec), "\n";
     return $dcRec;
 }
 
