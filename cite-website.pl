@@ -74,6 +74,7 @@ use Scalar::Util qw(reftype);
 use String::Util qw(trim);
 use Data::DPath 'dpath';
 use TryCatch;
+use Encode;
 
 use Carp;
 local $SIG{__WARN__} = sub { print( Carp::longmess (shift) ); };
@@ -136,7 +137,7 @@ $tree->parse($htmldoc);
 my $parsely_page = $html_headers->header('X-Meta-Parsely-Page');
 my $parsely_page_content;
 if (test($parsely_page)) {
-    $parsely_page_content = JSON::decode_json($parsely_page);
+    $parsely_page_content = JSON::decode_json(encode("UTF-8", $parsely_page));
     print STDERR "It looks like we have found some Parsely-Page microdata.\n";
     #print STDERR "parsely-page content:\n", Dumper($parsely_page_content), "\n";
 }
@@ -150,7 +151,7 @@ try {
     #print STDERR "raw schema.org JSON+LD data:\n", Dumper($ld_json), "\n";
     if (test($ld_json)) {
         try {
-            $schema_org_ld_json = JSON::decode_json($ld_json);
+            $schema_org_ld_json = JSON::decode_json(encode("UTF-8", $ld_json));
             print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
             if (!(test($schema_org_ld_json->{'@context'})
                   && $schema_org_ld_json->{'@context'} =~ m,^http://schema.org/?$,i
