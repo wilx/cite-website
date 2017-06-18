@@ -968,7 +968,8 @@ sub processHtmlHeaderMeta ($html_headers) {
         catch {};
     }
 
-    my $html_meta_keywords = $html_headers->header('X-Meta-Keywords');
+    my $html_meta_keywords = $html_headers->header('X-Meta-Keywords')
+        // $html_headers->header('X-Meta-News-Keywords');
     if (test($html_meta_keywords)) {
         trim($html_meta_keywords);
         $html_meta_keywords =~ s/(\s)\s*/$1/g;
