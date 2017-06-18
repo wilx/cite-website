@@ -525,13 +525,14 @@ sub processSchemaOrg($items) {
     my @md_articles = dpath(
         '//*/[key eq "type"'
         . ' && (value eq "http://schema.org/Article"'
+        . '     || value eq "http://schema.org/Book"'
         . '     || value eq "http://schema.org/CreativeWork"'
         . '     || value eq "http://schema.org/NewsArticle"'
         . '     || value eq "http://schema.org/VideoObject"'
         . '     || value eq "http://schema.org/ScholarlyArticle"'
         . '     || value eq "http://schema.org/BlogPosting")]/..')
         ->match($items);
-    if (test(@md_articles)) {
+    if (test(\@md_articles)) {
         print STDERR "It looks like we have an instance of ", $md_articles[0]{'type'}, ".\n";
     }
     else {
@@ -539,8 +540,8 @@ sub processSchemaOrg($items) {
     }
 
     #print STDERR "article entry:\n", Dumper(@md_articles), "\n";
-    if (test(\@md_articles)
-        && test($md_articles[0]{'properties'}{'datePublished'}[0])) {
+
+    if (test($md_articles[0]{'properties'}{'datePublished'}[0])) {
         try {
             my $date = date_parse(
                 $md_articles[0]{'properties'}{'datePublished'}[0]);
@@ -549,13 +550,19 @@ sub processSchemaOrg($items) {
         catch {};
     }
 
-    if (test(\@md_articles)
-        && test($md_articles[0]{'properties'}{'description'}[0])) {
+    if (test($md_articles[0]{'properties'}{'name'}[0])) {
+        $mdRec->title($md_articles[0]{'properties'}{'name'}[0]);
+    }
+
+    if (test($md_articles[0]{'properties'}{'isbn'}[0])) {
+        $mdRec->ISBN($md_articles[0]{'properties'}{'isbn'}[0]);
+    }
+
+    if (test($md_articles[0]{'properties'}{'description'}[0])) {
         $mdRec->abstract($md_articles[0]{'properties'}{'description'}[0]);
     }
 
-    if (test(\@md_articles)
-        && test($md_articles[0]{'properties'}{'keywords'})) {
+    if (test($md_articles[0]{'properties'}{'keywords'})) {
         $mdRec->keyword(join ", ", @{$md_articles[0]{'properties'}{'keywords'}});
     }
 
@@ -594,6 +601,8 @@ sub processSchemaOrg($items) {
         else {
             $mdRec->type('article');
         }
+    } elsif ($type eq 'http://schema.org/Book') {
+        $mdRec->type('book');
     }
 
     return $mdRec;
