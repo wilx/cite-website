@@ -535,20 +535,27 @@ sub processSchemaOrg($items) {
         }
     }
 
-    my @md_articles = dpath(
-        '//*/[key eq "type"'
-        . ' && (value eq "http://schema.org/Article"'
-        . '     || value eq "http://schema.org/Book"'
-        . '     || value eq "http://schema.org/CreativeWork"'
-        . '     || value eq "http://schema.org/NewsArticle"'
-        . '     || value eq "http://schema.org/VideoObject"'
-        . '     || value eq "http://schema.org/ScholarlyArticle"'
-        . '     || value eq "http://schema.org/BlogPosting")]/..')
-        ->match($items);
+    my @known_entities = ("Article",
+                          "Book",
+                          "CreativeWork",
+                          "NewsArticle",
+                          "VideoObject",
+                          "ScholarlyArticle",
+                          "BlogPosting");
+
+    my $value_expression = join " || ", map {
+        ("value eq \"http://schema.org/".$_."\"",
+         "value eq \"https://schema.org/".$_."\"")
+    } @known_entities;
+    my $dpath_query = '//*/[key eq "type" && (' . $value_expression . ')]/..';
+    #print STDERR "dpath query: ", $dpath_query, "\n";
+    my @md_articles = dpath($dpath_query)->match($items);
+    print STDERR "md_articles: ", Dumper(\@md_articles), "\n";
     if (test(\@md_articles)) {
         print STDERR "It looks like we have an instance of ", $md_articles[0]{'type'}, ".\n";
     }
     else {
+        print STDERR "We did not find any known to us schema.org entity.\n";
         return $mdRec;
     }
 
