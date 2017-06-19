@@ -259,34 +259,42 @@ sub date_conversion {
 
 
 sub parse_author {
-    my ($text, $additional_name) = @_;
-    my $author = {};
-    #print STDERR "Name: ", $text, "\n";
-    # Family name (comma) Given name
-    if ($text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
-        #print STDERR "Family name, Given name\n";
-        my $family = $1;
-        my $given = $2;
-        $author->{'family'} = $family;
-        $author->{'given'} = $given;
-    }
-    elsif ($text =~ /^\s*((?:\S+\s+|\S+)+)\s+(\S+)\s*$/) {
-        #print STDERR "long name\n";
-        my $family = $2;
-        my $given = $1;
-        $author->{'family'} = $family;
-        $author->{'given'} = $given;
-    }
-    else {
-        #print STDERR "just name\n";
-        $author->{'family'} = $text;
+    my ($str, $additional_name) = @_;
+    my @authors = ();
+    #print STDERR "Name: ", $str, "\n";
+    # Try as if string contains multiple names separated by "and".
+    my @names = split /,?\s*and\s+/, $str;
+    foreach my $text (@names) {
+        my $author = {};
+        # Family name (comma) Given name
+        if ($text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
+            #print STDERR "Family name, Given name\n";
+            my $family = $1;
+            my $given = $2;
+            $author->{'family'} = $family;
+            $author->{'given'} = $given;
+        }
+        elsif ($text =~ /^\s*((?:\S+\s+|\S+)+)\s+(\S+)\s*$/) {
+            #print STDERR "long name\n";
+            my $family = $2;
+            my $given = $1;
+            $author->{'family'} = $family;
+            $author->{'given'} = $given;
+        }
+        else {
+            #print STDERR "just name\n";
+            $author->{'family'} = $text;
+        }
+
+        if (scalar @names == 0
+            && test($additional_name)) {
+            $author->{'given'} .= " (" . $additional_name . ")";
+        }
+
+        push @authors, $author;
     }
 
-    if (test($additional_name)) {
-        $author->{'given'} .= " (" . $additional_name . ")";
-    }
-
-    return $author;
+    return @authors;
 }
 
 
@@ -471,8 +479,7 @@ sub processOpenGraph ($og) {
             foreach my $creator (@creators) {
                 #print STDERR "creator: >$creator<\n";
                 my $creator_text = $creator;
-                my $author = parse_author($creator_text);
-                push @{$ogRec->author}, $author;
+                push @{$ogRec->author}, parse_author($creator_text);
             }
         }
     }
@@ -506,15 +513,12 @@ sub processSchemaOrg($items) {
                     #print STDERR "author: ", Dumper(@authors), "\n";
                     my @additionalName = dpath('/properties/additionalName/*[0]')
                         ->match($md_author);
-
-                    my $author = parse_author($authors[0], $additionalName[0]);
-                    push @{$mdRec->author}, $author;
+                    push @{$mdRec->author}, parse_author($authors[0], $additionalName[0]);
                 }
             }
             elsif (ref $md_author eq ''
                    && test($md_author)) {
-                my $author = parse_author($md_author);
-                push @{$mdRec->author}, $author;
+                push @{$mdRec->author}, parse_author($md_author);
             }
             else {
                 print STDERR "Could not decode author data: ", $md_author, "\n";
@@ -622,13 +626,11 @@ sub processParselyPage ($parsely_page_content) {
     if (test($parsely_page_content->{'authors'})) {
         if ((ref $parsely_page_content->{'authors'} // '') eq 'ARRAY') {
             foreach my $author_str (@{$parsely_page_content->{'authors'}}) {
-                my $author = parse_author($author_str);
-                push @{$parselyPageRec->author}, $author;
+                push @{$parselyPageRec->author}, parse_author($author_str);
             }
         }
         else {
-            my $author = parse_author($parsely_page_content->{'authors'});
-            push @{$parselyPageRec->author}, $author;
+            push @{$parselyPageRec->author}, parse_author($parsely_page_content->{'authors'});
         }
     }
 
@@ -650,7 +652,7 @@ sub processParselyPage ($parsely_page_content) {
         }
     }
     else {
-        my $tag_str = parse_author($parsely_page_content->{'tags'});
+        my $tag_str = $parsely_page_content->{'tags'};
         push @{$parselyPageRec->keyword}, $tag_str;
     }
 
@@ -691,8 +693,7 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
             #print STDERR "Authors: ", Dumper(@authors), "\n";
             if (test(\@authors)) {
                 for my $author_str (@authors) {
-                    my $author = parse_author($author_str);
-                    push @{$schemaOrgJsonLd->author}, $author;
+                    push @{$schemaOrgJsonLd->author}, parse_author($author_str);
                 }
             }
         }
@@ -746,8 +747,7 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
     my @authors = $html_headers->header('X-Meta-Citation-Author');
     if (test(\@authors)) {
         for my $author_str (@authors) {
-            my $author = parse_author($author_str);
-            push @{$htmlMetaCitationRec->author}, $author;
+            push @{$htmlMetaCitationRec->author}, parse_author($author_str);
         }
     }
 
@@ -843,8 +843,7 @@ sub processHtmlHeaderBepressMetaCitation ($html_headers) {
     my @authors = $html_headers->header('X-Meta-Bepress-Citation-Author');
     if (test(\@authors)) {
         for my $author_str (@authors) {
-            my $author = parse_author($author_str);
-            push @{$htmlMetaCitationRec->author}, $author;
+            push @{$htmlMetaCitationRec->author}, parse_author($author_str);
         }
     }
 
