@@ -399,6 +399,7 @@ sub processOpenGraph ($og) {
             when ("article") { $type = "article"; }
             when ("book") { $type = "book"; }
             when ("website") { $type = "webpage"; }
+            when ("video") { $type = "video";}
             default { $type = "webpage"; }
         }
         $ogRec->type($type);
