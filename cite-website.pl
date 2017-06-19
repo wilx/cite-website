@@ -504,6 +504,21 @@ if (test($og)) {
 
 # Microdata using the schema.org entities.
 
+sub prep_schema_org_urls {
+    my @entities = @_;
+    return map {
+        ("value eq \"http://schema.org/".$_."\"",
+         "value eq \"https://schema.org/".$_."\"")
+    } @entities;
+}
+
+sub prep_schema_org_type_condition {
+    my @entities = @_;
+    my $value_expression = join " || ", prep_schema_org_urls(@entities);
+    my $condition = 'key eq "type" && (' . $value_expression . ')';
+    return $condition;
+}
+
 sub processSchemaOrg($items) {
     my $mdRec = RefRec->new;
 
@@ -543,11 +558,9 @@ sub processSchemaOrg($items) {
                           "ScholarlyArticle",
                           "BlogPosting");
 
-    my $value_expression = join " || ", map {
-        ("value eq \"http://schema.org/".$_."\"",
-         "value eq \"https://schema.org/".$_."\"")
-    } @known_entities;
-    my $dpath_query = '//*/[key eq "type" && (' . $value_expression . ')]/..';
+    my $dpath_query = ('//*/['
+                       . prep_schema_org_type_condition(@known_entities)
+                       . ']/..');
     #print STDERR "dpath query: ", $dpath_query, "\n";
     my @md_articles = dpath($dpath_query)->match($items);
     print STDERR "md_articles: ", Dumper(\@md_articles), "\n";
@@ -570,6 +583,15 @@ sub processSchemaOrg($items) {
         catch {};
     }
 
+    my @publisher = dpath(
+        '/properties/publisher/*/['
+        . prep_schema_org_type_condition("Organization")
+        . ']/../properties/name')
+        ->match($md_articles[0]);
+    if (test(\@publisher)) {
+        $mdRec->publisher((join ", ", $publisher[0][0]));
+    }
+
     if (test($md_articles[0]{'properties'}{'name'}[0])) {
         $mdRec->title($md_articles[0]{'properties'}{'name'}[0]);
     }
@@ -588,8 +610,9 @@ sub processSchemaOrg($items) {
 
     my @ispartof = dpath(
         '/properties/isPartOf/*/'
-        . '[key eq "type"'
-        . ' && value eq "http://schema.org/PublicationVolume"]/'
+        . '['
+        . prep_schema_org_type_condition("PublicationVolume")
+        . ']/'
         . '../properties')
         ->match($md_articles[0]);
     #print STDERR "ispartof:\n", Dumper(\@ispartof), "\n";
