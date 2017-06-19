@@ -144,21 +144,19 @@ if (test($parsely_page)) {
 
 # Schema.org data out of <script type="application/ld+json"> tag.
 
-my $schema_org_ld_json;
+my @schema_org_ld_json = ();
 
 try {
-    my $ld_json = $tree->findvalue('//script[@type="application/ld+json"]/text()');
-    #print STDERR "raw schema.org JSON+LD data:\n", Dumper($ld_json), "\n";
-    if (test($ld_json)) {
+    my @ld_json = $tree->findvalues('//script[@type="application/ld+json"]/text()');
+    foreach my $ld_json (@ld_json) {
         try {
-            $schema_org_ld_json = JSON::decode_json(encode("UTF-8", $ld_json));
+            my $schema_org_ld_json = JSON::decode_json(encode("UTF-8", $ld_json));
             #print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
-            if (!(test($schema_org_ld_json->{'@context'})
-                  && $schema_org_ld_json->{'@context'} =~ m,^http://schema.org/?$,i
-                  && test($schema_org_ld_json->{'@type'}))) {
-                $schema_org_ld_json = undef;
-            }
-            else {
+            if (test($schema_org_ld_json->{'@context'})
+                && $schema_org_ld_json->{'@context'} =~ m,^http://schema.org/?$,i
+                && test($schema_org_ld_json->{'@type'})) {
+
+                push @schema_org_ld_json, $schema_org_ld_json;
                 print STDERR "It looks like we have some schema.org data in JSON+LD.\n";
             }
         }
@@ -706,7 +704,18 @@ if (test($parsely_page_content)) {
 
 # Schema.org microdata in JSON+LD in <script type="application/ld+json">.
 
+sub scalar_to_array ($x) {
+    if (ref($x) eq 'ARRAY') {
+        return @{$x};
+    }
+    else {
+        return ($x,);
+    }
+}
+
 sub processSchemaOrgJsonLd ($schema_org_ld_json) {
+    #print STDERR "LD+JSON: ", Dumper($schema_org_ld_json), "\n";
+
     my $schemaOrgJsonLd = RefRec->new;
 
     my $context;
@@ -729,19 +738,16 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
     my $authors = choose($schema_org_ld_json->{'author'},
                          $schema_org_ld_json->{'creator'});
     if (test($authors)) {
-        if (ref($authors) eq 'ARRAY') {
-            #print STDERR "Authors: ", Dumper(@authors), "\n";
-            for my $author_str (@${authors}) {
-                push @{$schemaOrgJsonLd->author}, parse_author($author_str);
-            }
-        }
-        else {
-            print STDERR "Schema.org in JSON+LD's author is not an array.\n";
+        for my $author_str (scalar_to_array($authors)) {
+            push @{$schemaOrgJsonLd->author}, parse_author($author_str);
         }
     }
 
-    if (test($schema_org_ld_json->{'keywords'})) {
-        $schemaOrgJsonLd->keyword((join ", ", @{$schema_org_ld_json->{'keywords'}}));
+    my $keywords = $schema_org_ld_json->{'keywords'};
+    if (test($keywords)) {
+        for my $keywords (scalar_to_array($keywords)) {
+            $schemaOrgJsonLd->keyword((join ", ", $keywords));
+        }
     }
 
     #print STDERR "Parsed Schema.org JSON+LD record: ", Dumper($schemaOrgJsonLd), "\n";
@@ -749,9 +755,15 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
     return $schemaOrgJsonLd;
 }
 
-my $schemaOrgJsonLd = RefRec->new;
-if (test($schema_org_ld_json)) {
-    $schemaOrgJsonLd = processSchemaOrgJsonLd($schema_org_ld_json);
+my @schemaOrgJsonLd = ();
+foreach my $ld_json (@schema_org_ld_json) {
+    my $schemaOrgJsonLd = RefRec->new;
+    if (test($ld_json)) {
+        try {
+            push @schemaOrgJsonLd, processSchemaOrgJsonLd($ld_json);
+        }
+        catch {};
+    }
 }
 
 
@@ -1034,70 +1046,104 @@ if (defined $html_headers) {
 }
 
 
+sub gather_property {
+    my ($property, @records) = @_;
+    $property =~ y/-/_/;
+    my @values = ();
+    for my $record (@records) {
+        push @values, $record->$property;
+    }
+    #print STDERR "gathered values for property \"$property\": ", Dumper(\@values), "\n";
+    return @values;
+}
+
 my %entry = ();
 
 $entry{'title'} = choose(
-    $mdRec->title, $ogRec->title, $dcRec->title, $htmlMetaCitationRec->title,
-    $schemaOrgJsonLd->title, $parselyPageRec->title,
-    $htmlMetaBepressCitationRec->title, $htmlHeaderRec->title);
+    gather_property(
+        'title', $mdRec, $ogRec, $dcRec, $htmlMetaCitationRec,
+        @schemaOrgJsonLd, $parselyPageRec, $htmlMetaBepressCitationRec,
+        $htmlHeaderRec));
 $entry{'type'} = choose(
-    $mdRec->type, $htmlMetaCitationRec->type, $ogRec->type, $schemaOrgJsonLd->type,
-    $parselyPageRec->type, $htmlMetaBepressCitationRec->type, $htmlHeaderRec->type);
+    gather_property(
+        'type',
+        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd,
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'author'} = choose(
-    $dcRec->author, $htmlMetaCitationRec->author, $mdRec->author,
-    $schemaOrgJsonLd->author, $ogRec->author, $parselyPageRec->author,
-    $htmlMetaBepressCitationRec->author, $htmlHeaderRec->author);
+    gather_property(
+        'author',
+        $dcRec, $htmlMetaCitationRec, $mdRec, @schemaOrgJsonLd, $ogRec,
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
-    $dcRec->issued, $mdRec->issued, $ogRec->issued, $htmlMetaCitationRec->issued,
-    $schemaOrgJsonLd->issued, $parselyPageRec->issued,
-    $htmlMetaBepressCitationRec->issued, $htmlHeaderRec->issued);
+    gather_property(
+        'issued',
+        $dcRec, $mdRec, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'container-title'} = choose(
-    $htmlMetaCitationRec->container_title,  $mdRec->container_title,
-    $ogRec->container_title, $schemaOrgJsonLd->container_title,
-    $parselyPageRec->container_title, $htmlHeaderRec->container_title);
+    gather_property(
+        'container-title',
+        $htmlMetaCitationRec,  $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlHeaderRec));
 $entry{'collection-title'} = choose(
-    $htmlMetaCitationRec->collection_title,  $mdRec->collection_title,
-    $ogRec->collection_title, $schemaOrgJsonLd->collection_title,
-    $parselyPageRec->collection_title, $htmlMetaBepressCitationRec->collection_title,
-    $htmlHeaderRec->collection_title);
+    gather_property(
+        'collection-title',
+        $htmlMetaCitationRec,  $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'publisher'} = choose(
-    $dcRec->publisher, $mdRec->publisher, $ogRec->publisher,
-    $schemaOrgJsonLd->publisher, $parselyPageRec->publisher,
-    $htmlMetaBepressCitationRec->publisher, $htmlHeaderRec->publisher);
+    gather_property(
+        'publisher',
+        $dcRec, $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'publisher-place'} = choose(
-    $mdRec->publisher_place, $ogRec->publisher_place,
-    $schemaOrgJsonLd->publisher_place, $parselyPageRec->publisher_place,
-    $htmlMetaBepressCitationRec->publisher_place, $htmlHeaderRec->publisher_place);
+    gather_property(
+        'publisher-place',
+        $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'volume'} = choose(
-    $mdRec->volume, $htmlMetaCitationRec->volume, $ogRec->volume, $schemaOrgJsonLd->volume,
-    $parselyPageRec->volume, $htmlHeaderRec->volume);
+    gather_property(
+        'volume',
+        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlHeaderRec));
 $entry{'issue'} = choose(
-    $mdRec->issue, $htmlMetaCitationRec->issue, $ogRec->issue, $schemaOrgJsonLd->issue,
-    $parselyPageRec->issue, $htmlHeaderRec->issue);
+    gather_property(
+        'issue',
+        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlHeaderRec));
 $entry{'page'} = choose(
-    $mdRec->page, $htmlMetaCitationRec->page, $ogRec->page, $schemaOrgJsonLd->page, $parselyPageRec->page,
-    $htmlHeaderRec->page);
+    gather_property(
+        'page',
+        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlHeaderRec));
 $entry{'abstract'} = choose(
-    $dcRec->abstract, $mdRec->abstract, $ogRec->abstract,
-    $schemaOrgJsonLd->abstract, $parselyPageRec->abstract,
-    $htmlHeaderRec->abstract);
+    gather_property(
+        'abstract',
+        $dcRec, $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlHeaderRec));
 $entry{'keyword'} = choose(
-    $mdRec->keyword, $ogRec->keyword, $schemaOrgJsonLd->keyword,
-    $parselyPageRec->keyword, $htmlHeaderRec->keyword);
+    gather_property(
+        'keyword',
+        $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec, $htmlHeaderRec));
 $entry{'ISBN'} = choose(
-    $mdRec->ISBN, $ogRec->ISBN, $schemaOrgJsonLd->ISBN, $parselyPageRec->ISBN,
-    $htmlHeaderRec->ISBN);
+    gather_property(
+        'ISBN',
+        $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec, $htmlHeaderRec));
 $entry{'ISSN'} = choose(
-    $mdRec->ISSN, $htmlMetaCitationRec->ISSN, $ogRec->ISSN, $schemaOrgJsonLd->ISSN, $parselyPageRec->ISSN,
-    $htmlHeaderRec->ISSN);
+    gather_property(
+        'ISSN',
+        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlHeaderRec));
 $entry{'DOI'} = choose(
-    $dcRec->DOI, $mdRec->DOI, $htmlMetaCitationRec->DOI, $ogRec->DOI,
-    $schemaOrgJsonLd->DOI, $parselyPageRec->DOI, $htmlHeaderRec->DOI);
+    gather_property(
+        'DOI',
+        $dcRec, $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd,
+        $parselyPageRec, $htmlHeaderRec));
 $entry{'URL'} = choose(
-    $mdRec->URL, $ogRec->URL, $htmlMetaCitationRec->URL, $schemaOrgJsonLd->URL,
-    $parselyPageRec->URL, $htmlMetaBepressCitationRec->URL, $htmlHeaderRec->URL,
-    $dcRec->URL, $ARGV[0]);
+    gather_property(
+        'URL',
+        $mdRec, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec,
+        $dcRec), $ARGV[0]);
 
 # Remove undef values from entry.
 while (my ($key, $val) = each %entry) {
