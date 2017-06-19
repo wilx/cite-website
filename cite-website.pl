@@ -307,6 +307,14 @@ sub date_parse {
 
     #print STDERR "original date: ", $str, "\n";
     $str =~ s/^(\d\d\d\d-?\d\d-?\d\dT\d\d:?\d\d[+-])(\d\d\d)$/${1}0$2/;
+
+    # Different sites (www.theglobeandmail.com) provide dates with time zone
+    # added as abbreviation, e.g., EDT in 2017-06-15T21:06:21EDT. None of the
+    # so far employed modules want to parse that and converting the EDT
+    # string into actual offset is not trivial. So we remove the time zone
+    # here as it is not terribly important.
+
+    $str =~ s/^(.+)([a-z]{3}(?:[a-z]{0,2}\d?)?)$/$1/i;
     #print STDERR "fixed date: ", $str, "\n";
 
     # Try various parsing routines.
