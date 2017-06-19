@@ -726,14 +726,13 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
         catch {};
     }
 
-    if (test($schema_org_ld_json->{'author'})) {
-        if (ref($schema_org_ld_json->{'author'}) eq 'ARRAY') {
-            my @authors = @{$schema_org_ld_json->{'author'}};
+    my $authors = choose($schema_org_ld_json->{'author'},
+                         $schema_org_ld_json->{'creator'});
+    if (test($authors)) {
+        if (ref($authors) eq 'ARRAY') {
             #print STDERR "Authors: ", Dumper(@authors), "\n";
-            if (test(\@authors)) {
-                for my $author_str (@authors) {
-                    push @{$schemaOrgJsonLd->author}, parse_author($author_str);
-                }
+            for my $author_str (@${authors}) {
+                push @{$schemaOrgJsonLd->author}, parse_author($author_str);
             }
         }
         else {
