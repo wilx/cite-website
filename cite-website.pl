@@ -296,6 +296,16 @@ sub parse_author {
 }
 
 
+sub remove_dupe_authors {
+    my ($rec) = @_;
+    my @authors = @{$rec->author};
+    my %seen = ();
+    my @deduped_authors = grep {
+        not $seen{$_->{'family'}}{$_->{'given'}}++; } @authors;
+    $rec->author([@deduped_authors]);
+}
+
+
 sub date_parse {
     my $str = $_[0];
 
@@ -488,6 +498,7 @@ sub processOpenGraph ($og) {
                 my $creator_text = $creator;
                 push @{$ogRec->author}, parse_author($creator_text);
             }
+            remove_dupe_authors($ogRec);
         }
     }
 
@@ -546,6 +557,7 @@ sub processSchemaOrg($items) {
                 print STDERR "Could not decode author data: ", $md_author, "\n";
             }
         }
+        remove_dupe_authors($mdRec);
     }
 
     my @known_entities = ("Article",
@@ -669,6 +681,7 @@ sub processParselyPage ($parsely_page_content) {
         else {
             push @{$parselyPageRec->author}, parse_author($parsely_page_content->{'authors'});
         }
+        remove_dupe_authors($parselyPageRec);
     }
 
     if (test($parsely_page_content->{'title'})) {
@@ -741,6 +754,7 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
         for my $author_str (scalar_to_array($authors)) {
             push @{$schemaOrgJsonLd->author}, parse_author($author_str);
         }
+        remove_dupe_authors($schemaOrgJsonLd);
     }
 
     my $keywords = $schema_org_ld_json->{'keywords'};
@@ -799,6 +813,7 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
         for my $author_str (@authors) {
             push @{$htmlMetaCitationRec->author}, parse_author($author_str);
         }
+        remove_dupe_authors($htmlMetaCitationRec);
     }
 
     my $pdf_url = $html_headers->header('X-Meta-Citation-Pdf-Url');
@@ -895,6 +910,7 @@ sub processHtmlHeaderBepressMetaCitation ($html_headers) {
         for my $author_str (@authors) {
             push @{$htmlMetaCitationRec->author}, parse_author($author_str);
         }
+        remove_dupe_authors($htmlMetaCitationRec);
     }
 
     my $pdf_url = $html_headers->header('X-Meta-Bepress-Citation-Pdf-Url');
@@ -936,6 +952,7 @@ sub processDublinCoreHtml ($dc) {
             push @{$dcRec->author}, parse_author($author->content);
         }
     }
+    remove_dupe_authors($dcRec);
 
     my $date;
     if (test($date = $dc->element('Date'))
@@ -988,6 +1005,7 @@ sub processHtmlHeaderMeta ($html_headers) {
         my $author = parse_author($html_headers->header('X-Meta-Author'));
         push @{$htmlHeaderRec->author}, $author;
     }
+    remove_dupe_authors($htmlHeaderRec);
 
     my $html_meta_date_str = $html_headers->header('X-Meta-Date');
     if (test($html_meta_date_str)) {
