@@ -602,8 +602,10 @@ sub processSchemaOrg($items) {
         $mdRec->publisher((join ", ", $publisher[0][0]));
     }
 
-    if (test($md_articles[0]{'properties'}{'name'}[0])) {
-        $mdRec->title($md_articles[0]{'properties'}{'name'}[0]);
+    my $title = $md_articles[0]{'properties'}{'name'}[0]
+        // $md_articles[0]{'properties'}{'headline'}[0];
+    if (test($title)) {
+        $mdRec->title($title);
     }
 
     if (test($md_articles[0]{'properties'}{'isbn'}[0])) {
