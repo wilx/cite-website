@@ -301,7 +301,7 @@ sub remove_dupe_authors {
     my @authors = @{$rec->author};
     my %seen = ();
     my @deduped_authors = grep {
-        not $seen{$_->{'family'}}{$_->{'given'}}++; } @authors;
+        not $seen{$_->{'family'}}{$_->{'given'} // ''}++; } @authors;
     $rec->author([@deduped_authors]);
 }
 
