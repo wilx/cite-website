@@ -837,7 +837,7 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
     }
 
     my $ISSN = $html_headers->header('X-Meta-Citation-ISSN');
-    if (test($issue)) {
+    if (test($ISSN)) {
         $htmlMetaCitationRec->ISSN(trim(decode_entities($ISSN)));
     }
 
