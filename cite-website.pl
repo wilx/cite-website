@@ -788,21 +788,17 @@ foreach my $ld_json (@schema_org_ld_json) {
 sub processHtmlHeaderMetaCitation ($html_headers) {
     my $htmlMetaCitationRec = RefRec->new;
 
-    my $citation_date_str = $html_headers->header('X-Meta-Citation-Online-Date');
-    if (test($citation_date_str)) {
-        try {
-            my $date = date_parse($citation_date_str);
-            $htmlMetaCitationRec->issued(date_conversion($date));
+    for my $meta_name ('X-Meta-Citation-Online-Date', 'X-Meta-Citation-Date',
+                       'X-Meta-Citation-Publication-Date') {
+        my $citation_date_str = $html_headers->header($meta_name);
+        if (test($citation_date_str)) {
+            try {
+                my $date = date_parse($citation_date_str);
+                $htmlMetaCitationRec->issued(date_conversion($date));
+                last;
+            }
+            catch {};
         }
-        catch {};
-    }
-    elsif (test($citation_date_str
-                = $html_headers->header('X-Meta-Citation-Date'))) {
-        try {
-            my $date = date_parse($citation_date_str);
-            $htmlMetaCitationRec->issued(date_conversion($date));
-        }
-        catch {};
     }
 
     my $citation_title = $html_headers->header('X-Meta-Citation-Title');
