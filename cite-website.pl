@@ -263,6 +263,10 @@ sub parse_author {
     # Try as if string contains multiple names separated by "and".
     my @names = split /,?\s*and\s+/, $str;
     foreach my $text (@names) {
+        # Sometimes the author metadata contains a link to Facebook page or
+        # similar links and hides actual author name in other metadata
+        # sources. We want to avoid this.
+        next if $text =~ /^https?:/;
         my $author = {};
         # Family name (comma) Given name
         if ($text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
