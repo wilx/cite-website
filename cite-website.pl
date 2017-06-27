@@ -310,6 +310,18 @@ sub remove_dupe_authors {
 }
 
 
+sub date_parse_using_cldr ($locale, $format, $str) {
+    my $cldr = DateTime::Format::CLDR->new(
+        pattern => $locale->$format,
+        locale => $locale);
+    #print STDERR "CLDR pattern: ", $cldr->pattern, " for locale ", $locale->name, "\n";
+    my $date = $cldr->parse_datetime($str);
+    die "could not parse date " . $str . " with CLDR " . $cldr->pattern . ": "
+        . $cldr->errmsg() unless defined $date;
+    return $date;
+}
+
+
 sub date_parse {
     my $str = $_[0];
 
@@ -344,17 +356,33 @@ sub date_parse {
     catch {};
 
     if (test($lang)) {
-        try {
-            my $locale = DateTime::Locale->load($lang);
-            my $cldr = DateTime::Format::CLDR->new(
-                pattern => $locale->date_format_long,
-                locale => $locale);
+        my $locale = DateTime::Locale->load($lang);
+        print STDERR "locale: ", Dumper($locale), "\n";
 
-            #print STDERR "CLDR pattern: ", $cldr->pattern, "\n";
-            my $date = $cldr->parse_datetime($str);
-            die "could not parse date $str: " . $cldr->errmsg() unless defined $date;
+        try {
+            my $date = date_parse_using_cldr($locale, 'date_format_full', $str);
+            return $date;
         }
         catch {};
+
+        try {
+            my $date = date_parse_using_cldr($locale, 'date_format_long', $str);
+            return $date;
+        }
+        catch {};
+
+        try {
+            my $date = date_parse_using_cldr($locale, 'date_format_medium', $str);
+            return $date;
+        }
+        catch {};
+
+        try {
+            my $date = date_parse_using_cldr($locale, 'date_format_short', $str);
+            return $date;
+        }
+        catch {};
+
     }
 
     # Parse POSIX seconds since epoch time stamp.
