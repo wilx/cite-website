@@ -356,33 +356,35 @@ sub date_parse {
     catch {};
 
     if (test($lang)) {
-        my $locale = DateTime::Locale->load($lang);
-        #print STDERR "locale: ", Dumper($locale), "\n";
-
         try {
-            my $date = date_parse_using_cldr($locale, 'date_format_full', $str);
-            return $date;
+            my $locale = DateTime::Locale->load($lang);
+            #print STDERR "locale: ", Dumper($locale), "\n";
+
+            try {
+                my $date = date_parse_using_cldr($locale, 'date_format_full', $str);
+                return $date;
+            }
+            catch {};
+
+            try {
+                my $date = date_parse_using_cldr($locale, 'date_format_long', $str);
+                return $date;
+            }
+            catch {};
+
+            try {
+                my $date = date_parse_using_cldr($locale, 'date_format_medium', $str);
+                return $date;
+            }
+            catch {};
+
+            try {
+                my $date = date_parse_using_cldr($locale, 'date_format_short', $str);
+                return $date;
+            }
+            catch {};
         }
         catch {};
-
-        try {
-            my $date = date_parse_using_cldr($locale, 'date_format_long', $str);
-            return $date;
-        }
-        catch {};
-
-        try {
-            my $date = date_parse_using_cldr($locale, 'date_format_medium', $str);
-            return $date;
-        }
-        catch {};
-
-        try {
-            my $date = date_parse_using_cldr($locale, 'date_format_short', $str);
-            return $date;
-        }
-        catch {};
-
     }
 
     # Parse POSIX seconds since epoch time stamp.
