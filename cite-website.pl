@@ -153,7 +153,7 @@ try {
             my $schema_org_ld_json = JSON::decode_json(encode("UTF-8", $ld_json));
             #print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
             if (test($schema_org_ld_json->{'@context'})
-                && $schema_org_ld_json->{'@context'} =~ m,^http://schema.org/?$,i
+                && $schema_org_ld_json->{'@context'} =~ m,^https?://schema\.org/?$,i
                 && test($schema_org_ld_json->{'@type'})) {
 
                 push @schema_org_ld_json, $schema_org_ld_json;
@@ -568,18 +568,31 @@ if (test($og)) {
 
 # Microdata using the schema.org entities.
 
-sub prep_schema_org_urls {
-    my @entities = @_;
-    return map {
-        ("value eq \"http://schema.org/".$_."\"",
-         "value eq \"https://schema.org/".$_."\"")
-    } @entities;
+sub prep_single_schema_org_url_re ($entity) {
+    return qr,(?i:^https?://schema\.org/\Q$entity\E/?$),;
 }
 
-sub prep_schema_org_type_condition {
+sub prep_schema_org_re {
     my @entities = @_;
-    my $value_expression = join " || ", prep_schema_org_urls(@entities);
-    my $condition = 'key eq "type" && (' . $value_expression . ')';
+    @entities = map { my $e = $_; prep_single_schema_org_url_re($e); } @entities;
+    my $re;
+    for my $part (@entities) {
+        if (!defined $re) {
+            $re = $part;
+        }
+        else {
+            $re = $part . '|' . $re;
+        }
+    }
+    #print STDERR "built re for some schema.org entities: ", $re, "\n";
+    return $re;
+}
+
+sub prep_schema_org_type_re_condition {
+    my @entities = @_;
+    my $value_expression = prep_schema_org_re(@entities);
+    $value_expression =~ s,/,\\/,g;
+    my $condition = 'key eq "type" && value =~ /' . $value_expression . '/';
     return $condition;
 }
 
@@ -593,9 +606,10 @@ sub processSchemaOrg($items) {
         print STDERR ("It looks like we have ", scalar @md_authors,
                       " schema.org authors.\n");
         foreach my $md_author (@md_authors) {
+            print STDERR "md_author: ", Dumper($md_author), "\n";
             if (ref $md_author ne ''
                 && exists $md_author->{'type'}
-                && $md_author->{'type'} eq 'http://schema.org/Person') {
+                && $md_author->{'type'} =~ prep_schema_org_re('Person')) {
                 my @authors = dpath('/properties/name/*[0]')->match($md_author);
                 if (test(@authors)) {
                     #print STDERR "author: ", Dumper(@authors), "\n";
@@ -624,7 +638,7 @@ sub processSchemaOrg($items) {
                           "BlogPosting");
 
     my $dpath_query = ('//*/['
-                       . prep_schema_org_type_condition(@known_entities)
+                       . prep_schema_org_type_re_condition(@known_entities)
                        . ']/..');
     #print STDERR "dpath query: ", $dpath_query, "\n";
     my @md_articles = dpath($dpath_query)->match($items);
@@ -650,7 +664,7 @@ sub processSchemaOrg($items) {
 
     my @publisher = dpath(
         '/properties/publisher/*/['
-        . prep_schema_org_type_condition("Organization")
+        . prep_schema_org_type_re_condition("Organization")
         . ']/../properties/name')
         ->match($md_articles[0]);
     if (test(\@publisher)) {
@@ -678,7 +692,7 @@ sub processSchemaOrg($items) {
     my @ispartof = dpath(
         '/properties/isPartOf/*/'
         . '['
-        . prep_schema_org_type_condition("PublicationVolume")
+        . prep_schema_org_type_re_condition("PublicationVolume")
         . ']/'
         . '../properties')
         ->match($md_articles[0]);
@@ -694,8 +708,9 @@ sub processSchemaOrg($items) {
         }
 
         my @cont = dpath('/isPartOf/*[0]/*/'
-                         . '[key eq "type"'
-                         . ' && value eq "http://schema.org/Periodical"]/'
+                         . '['
+                         . prep_schema_org_type_re_condition('Periodical')
+                         . ']/'
                          . '../properties/name/*[0]')->match($ispartof[0]);
         if (test (\@cont)) {
             $mdRec->container_title($cont[0]);
@@ -704,14 +719,14 @@ sub processSchemaOrg($items) {
     }
 
     my $type = $md_articles[0]{'type'};
-    if ($type eq 'http://schema.org/ScholarlyArticle') {
+    if ($type =~ prep_single_schema_org_url_re('ScholarlyArticle')) {
         if (test($mdRec->container_title)) {
             $mdRec->type('article-journal');
         }
         else {
             $mdRec->type('article');
         }
-    } elsif ($type eq 'http://schema.org/Book') {
+    } elsif ($type =~ prep_single_schema_org_url_re('Book')) {
         $mdRec->type('book');
     }
 
