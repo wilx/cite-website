@@ -237,6 +237,12 @@ sub read_og_array {
 }
 
 
+sub trim_multiline_string ($str) {
+    $str =~ s/(?:\s*(\R)){2}\s*\R*\s*/$1$1/g;
+    return trim($str);
+}
+
+
 sub date_conversion {
     my $date = $_[0];
     my $year = $date->year;
@@ -441,7 +447,7 @@ sub processOpenGraph ($og) {
 
     my $description = $og->property('description');
     if (test($description)) {
-        $ogRec->abstract(trim(decode_entities($description)));
+        $ogRec->abstract(trim_multiline_string(decode_entities($description)));
     }
 
     my $url = $og->property('url');
@@ -695,7 +701,9 @@ sub processSchemaOrg($items) {
     }
 
     if (test($md_articles[0]{'properties'}{'description'}[0])) {
-        $mdRec->abstract($md_articles[0]{'properties'}{'description'}[0]);
+        $mdRec->abstract(
+            trim_multiline_string(
+                $md_articles[0]{'properties'}{'description'}[0]));
     }
 
     if (test($md_articles[0]{'properties'}{'keywords'})) {
@@ -1060,7 +1068,7 @@ sub processDublinCoreHtml ($dc) {
 
     my $description = $dc->element('Description');
     if (test($description) && test($description = $description->content)) {
-        $dcRec->abstract($description);
+        $dcRec->abstract(trim_multiline_string($description));
     }
 
     #print STDERR "DublinCore metadata:\n", Dumper($dcRec), "\n";
@@ -1133,7 +1141,9 @@ sub processHtmlHeaderMeta ($html_headers) {
     }
 
     if (test($html_headers->header('X-Meta-Description'))) {
-        $htmlHeaderRec->abstract(trim($html_headers->header('X-Meta-Description')));
+        $htmlHeaderRec->abstract(
+            trim_multiline_string(
+                $html_headers->header('X-Meta-Description')));
     }
 
     return $htmlHeaderRec;
