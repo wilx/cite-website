@@ -599,6 +599,19 @@ sub prep_schema_org_type_re_condition {
 sub processSchemaOrg($items) {
     my $mdRec = RefRec->new;
 
+    # Sometimes the top level element is missing. Inject CreativeWork and
+    # hope for the best.
+
+    for my $item (@$items) {
+        if (exists $item->{'properties'}
+            && ! exists $item->{'type'}) {
+            my $creative_work = 'http://schema.org/CreativeWork';
+            print STDERR "This schema.org entity is missing type, let's inject ",
+                $creative_work, "\n";
+            $item->{'type'} = $creative_work;
+        }
+    }
+
     my @md_authors = dpath('//author/*')->match($items);
     #print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
 
