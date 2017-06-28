@@ -324,13 +324,16 @@ sub date_parse_using_cldr ($locale, $format, $str) {
 
 sub date_parse {
     my $str = $_[0];
+    my $orig = $str;
+    print STDERR "Original date: ", $orig, "\n";
 
     # Some web sites (www.washingtonpost.com) fail at to provide a date that
     # can be parsed by any of of the code below by using only 3 digit time
     # zone offset: 2016-01-27T02:24-500. Fix it here.
 
-    #print STDERR "original date: ", $str, "\n";
-    $str =~ s/^(\d\d\d\d-?\d\d-?\d\dT\d\d:?\d\d[+-])(\d\d\d)$/${1}0$2/;
+    if ($str =~ s/^(\d\d\d\d-?\d\d-?\d\dT\d\d:?\d\d[+-])(\d\d\d)$/${1}0$2/) {
+        print STDERR "Adding missing zero to time zone offset in date: ", $str, "\n";
+    }
 
     # Different sites (www.theglobeandmail.com) provide dates with time zone
     # added as abbreviation, e.g., EDT in 2017-06-15T21:06:21EDT. None of the
@@ -338,22 +341,30 @@ sub date_parse {
     # string into actual offset is not trivial. So we remove the time zone
     # here as it is not terribly important.
 
-    $str =~ s/^(.+)([a-z]{3}(?:[a-z]{0,2}\d?)?)$/$1/i;
+    if ($str =~ s/^(.+)([a-z]{3}(?:[a-z]{0,2}\d?)?)$/$1/i) {
+        print STDERR "Stripping time zone abbreviation from date: ", $str, "\n";
+    }
     #print STDERR "fixed date: ", $str, "\n";
 
     # Try various parsing routines.
 
     try {
         my $date = DateTime::Format::ISO8601->parse_datetime($str);
+        print STDERR "Date ", $str, " looks like ISO 8601 date.\n";
         return $date;
     }
-    catch {};
+    catch {
+        print STDERR "Hmm, ", $str, " does not seem to be ISO 8601 date.\n";
+    };
 
     try {
         my $date = DateTime::Format::HTTP->parse_datetime($str);
+        print STDERR "Date ", $str, " looks like HTTP formatted date.\n";
         return $date;
     }
-    catch {};
+    catch {
+        print STDERR "Hmm, ", $str, " does not seem to be HTTP formatted date.\n";
+    };
 
     if (test($lang)) {
         try {
@@ -362,29 +373,39 @@ sub date_parse {
 
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_full', $str);
+                print STDERR "Date ", $str, " looks like full date in ", $locale->name,
+                    " locale";
                 return $date;
             }
             catch {};
 
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_long', $str);
+                print STDERR "Date ", $str, " looks like long date in ", $locale->name,
+                    " locale";
                 return $date;
             }
             catch {};
 
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_medium', $str);
+                print STDERR "Date ", $str, " looks like medium date in ", $locale->name,
+                    " locale";
                 return $date;
             }
             catch {};
 
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_short', $str);
+                print STDERR "Date ", $str, " looks like short date in ", $locale->name,
+                    " locale";
                 return $date;
             }
             catch {};
         }
-        catch {};
+        catch {
+            print STDERR "Failed to load \"", $lang, "\" locale\n";
+        };
     }
 
     # Parse POSIX seconds since epoch time stamp.
@@ -399,7 +420,7 @@ sub date_parse {
                 start_at => 0,
                 local_epoch => undef);
             my $date = $parser->parse_datetime($str);
-            #print STDERR "date from epoch: ", $date, "\n";
+            print STDERR "Date ", $str, " looks like seconds since UNIX epoch\n";
             return $date;
         }
         catch {};
