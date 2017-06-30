@@ -169,6 +169,10 @@ catch {};
 
 my $lang;
 {
+    my $html_lang = $tree->findvalue('/html/@lang');
+    my $html_xml_lang = $tree->findvalue('/html/@xml:lang');
+    #print STDERR "xml:lang: ", $html_xml_lang, "\n";
+
     my $keywords_lang = $tree->findvalue('//head/meta[@name="keywords"]/@lang');
     #print STDERR "keywords_lang: ", Dumper($keywords_lang), "\n";
 
@@ -178,7 +182,8 @@ my $lang;
     my $og_locale = $og->property('locale');
     #print STDERR "og:locale: ", $og_locale // "(undef)", "\n";
 
-    $lang = $og_locale // $keywords_lang // $description_lang;
+    $lang = $og_locale // $html_lang // $html_xml_lang // $keywords_lang
+        // $description_lang;
     #print STDERR "lang: ", $lang // "(undef)", "\n";
 }
 
@@ -333,6 +338,9 @@ sub date_parse {
     my $orig = $str;
     print STDERR "Original date: ", $orig, "\n";
 
+    # Trim it.
+    $str = trim($str);
+
     # Some web sites (www.washingtonpost.com) fail at to provide a date that
     # can be parsed by any of of the code below by using only 3 digit time
     # zone offset: 2016-01-27T02:24-500. Fix it here.
@@ -380,7 +388,7 @@ sub date_parse {
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_full', $str);
                 print STDERR "Date ", $str, " looks like full date in ", $locale->name,
-                    " locale";
+                    " locale\n";
                 return $date;
             }
             catch {};
@@ -388,7 +396,7 @@ sub date_parse {
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_long', $str);
                 print STDERR "Date ", $str, " looks like long date in ", $locale->name,
-                    " locale";
+                    " locale\n";
                 return $date;
             }
             catch {};
@@ -396,7 +404,7 @@ sub date_parse {
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_medium', $str);
                 print STDERR "Date ", $str, " looks like medium date in ", $locale->name,
-                    " locale";
+                    " locale\n";
                 return $date;
             }
             catch {};
@@ -404,7 +412,7 @@ sub date_parse {
             try {
                 my $date = date_parse_using_cldr($locale, 'date_format_short', $str);
                 print STDERR "Date ", $str, " looks like short date in ", $locale->name,
-                    " locale";
+                    " locale\n";
                 return $date;
             }
             catch {};
