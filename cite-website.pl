@@ -610,23 +610,21 @@ sub prep_schema_org_type_re_condition {
     return $condition;
 }
 
-sub processSchemaOrg($items) {
+sub processSchemaOrg($item) {
     my $mdRec = RefRec->new;
 
     # Sometimes the top level element is missing. Inject CreativeWork and
     # hope for the best.
 
-    for my $item (@$items) {
-        if (exists $item->{'properties'}
-            && ! exists $item->{'type'}) {
-            my $creative_work = 'http://schema.org/CreativeWork';
-            print STDERR "This schema.org entity is missing type, let's inject ",
-                $creative_work, "\n";
-            $item->{'type'} = $creative_work;
-        }
+    if (exists $item->{'properties'}
+        && ! exists $item->{'type'}) {
+        my $creative_work = 'http://schema.org/CreativeWork';
+        print STDERR "This schema.org entity is missing type, let's inject ",
+            $creative_work, "\n";
+        $item->{'type'} = $creative_work;
     }
 
-    my @md_authors = dpath('//author/*')->match($items);
+    my @md_authors = dpath('//author/*')->match($item);
     #print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
 
     if (test(\@md_authors)) {
@@ -668,7 +666,7 @@ sub processSchemaOrg($items) {
                        . prep_schema_org_type_re_condition(@known_entities)
                        . ']/..');
     #print STDERR "dpath query: ", $dpath_query, "\n";
-    my @md_articles = dpath($dpath_query)->match($items);
+    my @md_articles = dpath($dpath_query)->match($item);
     print STDERR "md_articles: ", Dumper(\@md_articles), "\n";
     if (test(\@md_articles)) {
         print STDERR "It looks like we have an instance of ", $md_articles[0]{'type'}, ".\n";
@@ -678,7 +676,7 @@ sub processSchemaOrg($items) {
         return $mdRec;
     }
 
-    #print STDERR "article entry:\n", Dumper(@md_articles), "\n";
+    print STDERR "article entry:\n", Dumper(@md_articles), "\n";
 
     if (test($md_articles[0]{'properties'}{'datePublished'}[0])) {
         try {
@@ -696,6 +694,8 @@ sub processSchemaOrg($items) {
         ->match($md_articles[0]);
     if (test(\@publisher)) {
         $mdRec->publisher((join ", ", $publisher[0][0]));
+    } elsif (test($md_articles[0]{'properties'}{'publisher'}[0])) {
+        $mdRec->publisher($md_articles[0]{'properties'}{'publisher'}[0]);
     }
 
     my $title = $md_articles[0]{'properties'}{'headline'}[0]
@@ -762,9 +762,12 @@ sub processSchemaOrg($items) {
     return $mdRec;
 }
 
-my $mdRec = RefRec->new;
-if (test($items)) {
-    $mdRec = processSchemaOrg($items);
+my @mdRecs = ();
+for my $item (@$items) {
+    if (test($item)) {
+        my $mdRec = processSchemaOrg($item);
+        push @mdRecs, $mdRec;
+    }
 }
 
 
@@ -1178,87 +1181,87 @@ my %entry = ();
 
 $entry{'title'} = choose(
     gather_property(
-        'title', $mdRec, $ogRec, $dcRec, $htmlMetaCitationRec,
+        'title', @mdRecs, $ogRec, $dcRec, $htmlMetaCitationRec,
         @schemaOrgJsonLd, $parselyPageRec, $htmlMetaBepressCitationRec,
         $htmlHeaderRec));
 $entry{'type'} = choose(
     gather_property(
         'type',
-        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd,
+        @mdRecs, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'author'} = choose(
     gather_property(
         'author',
-        $dcRec, $htmlMetaCitationRec, $mdRec, @schemaOrgJsonLd, $ogRec,
+        $dcRec, $htmlMetaCitationRec, @mdRecs, @schemaOrgJsonLd, $ogRec,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
     gather_property(
         'issued',
-        $dcRec, $mdRec, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
+        $dcRec, @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'container-title'} = choose(
     gather_property(
         'container-title',
-        $htmlMetaCitationRec,  $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlMetaCitationRec,  @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
 $entry{'collection-title'} = choose(
     gather_property(
         'collection-title',
-        $htmlMetaCitationRec,  $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlMetaCitationRec,  @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'publisher'} = choose(
     gather_property(
         'publisher',
-        $dcRec, $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $dcRec, @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'publisher-place'} = choose(
     gather_property(
         'publisher-place',
-        $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'volume'} = choose(
     gather_property(
         'volume',
-        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        @mdRecs, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
 $entry{'issue'} = choose(
     gather_property(
         'issue',
-        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        @mdRecs, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
 $entry{'page'} = choose(
     gather_property(
         'page',
-        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        @mdRecs, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
 $entry{'abstract'} = choose(
     gather_property(
         'abstract',
-        $dcRec, $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $dcRec, @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
 $entry{'keyword'} = choose(
     gather_property(
         'keyword',
-        $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec, $htmlHeaderRec));
+        @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec, $htmlHeaderRec));
 $entry{'ISBN'} = choose(
     gather_property(
         'ISBN',
-        $mdRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec, $htmlHeaderRec));
+        @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec, $htmlHeaderRec));
 $entry{'ISSN'} = choose(
     gather_property(
         'ISSN',
-        $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        @mdRecs, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
 $entry{'DOI'} = choose(
     gather_property(
         'DOI',
-        $dcRec, $mdRec, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd,
+        $dcRec, @mdRecs, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd,
         $parselyPageRec, $htmlHeaderRec));
 $entry{'URL'} = choose(
     gather_property(
         'URL',
-        $mdRec, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
+        @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec,
         $dcRec), $ARGV[0]);
 
