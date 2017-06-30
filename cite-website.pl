@@ -660,7 +660,8 @@ sub processSchemaOrg($item) {
                           "NewsArticle",
                           "VideoObject",
                           "ScholarlyArticle",
-                          "BlogPosting");
+                          "BlogPosting",
+                          "WebPage");
 
     my $dpath_query = ('//*/['
                        . prep_schema_org_type_re_condition(@known_entities)
