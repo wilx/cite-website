@@ -670,7 +670,9 @@ sub processSchemaOrg($item) {
     my @md_articles = dpath($dpath_query)->match($item);
     print STDERR "md_articles: ", Dumper(\@md_articles), "\n";
     if (test(\@md_articles)) {
-        print STDERR "It looks like we have an instance of ", $md_articles[0]{'type'}, ".\n";
+        my @types = map { $_->{'type'} } @md_articles;
+        print STDERR "It looks like we have instance(s) of ",
+            (join ", ", @types), "\n";
     }
     else {
         print STDERR "We did not find any known to us schema.org entity.\n";
