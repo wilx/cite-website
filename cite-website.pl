@@ -1155,7 +1155,7 @@ sub processHtmlHeaderMeta ($html_headers) {
     if (test($html_headers->header('X-Meta-Description'))) {
         $htmlHeaderRec->abstract(
             trim_multiline_string(
-                $html_headers->header('X-Meta-Description')));
+                choose($html_headers->header('X-Meta-Description'))));
     }
 
     return $htmlHeaderRec;
