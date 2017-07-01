@@ -856,8 +856,16 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
     my $authors = choose($schema_org_ld_json->{'author'},
                          $schema_org_ld_json->{'creator'});
     if (test($authors)) {
-        for my $author_str (scalar_to_array($authors)) {
-            push @{$schemaOrgJsonLd->author}, parse_author($author_str);
+        if (reftype($authors) eq 'HASH') {
+            $authors = $authors->{'name'};
+            for my $author_str (scalar_to_array($authors)) {
+                push @{$schemaOrgJsonLd->author}, parse_author($author_str);
+            }
+        }
+        else {
+            for my $author_str (scalar_to_array($authors)) {
+                push @{$schemaOrgJsonLd->author}, parse_author($author_str);
+            }
         }
         remove_dupe_authors($schemaOrgJsonLd);
     }
