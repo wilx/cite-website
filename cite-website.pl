@@ -908,9 +908,9 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
             try {
                 my $date = date_parse($citation_date_str);
                 $htmlMetaCitationRec->issued(date_conversion($date));
-                last;
             }
             catch {};
+            last if test($htmlMetaCitationRec->issued);
         }
     }
 
