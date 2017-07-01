@@ -1166,6 +1166,11 @@ sub processHtmlHeaderMeta ($html_headers) {
                 choose($html_headers->header('X-Meta-Description'))));
     }
 
+    my $url = $tree->findvalue('//head/link[@rel="canonical"]/@href');
+    if (test($url)) {
+        $htmlHeaderRec->URL(decode_entities($url));
+    }
+
     return $htmlHeaderRec;
 }
 
