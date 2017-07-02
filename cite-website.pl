@@ -49,6 +49,7 @@ use warnings;
 use criticism;
 ## no critic (ProhibitSubroutinePrototypes)
 use experimental 'switch';
+use syntax 'try';
 use feature qw(signatures);
 no warnings qw(experimental::signatures);
 
@@ -73,7 +74,6 @@ use IO::Handle;
 use Scalar::Util qw(reftype);
 use String::Util qw(trim);
 use Data::DPath 'dpath';
-use TryCatch;
 use Encode;
 
 use Carp;
