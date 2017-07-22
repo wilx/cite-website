@@ -1182,6 +1182,30 @@ if (defined $html_headers) {
 }
 
 
+sub processRelAttribute ($tree) {
+    my $relRec = RefRec->new;
+
+    my $author = $tree->findvalue('//*[@rel="author"]/text()');
+    if (test($author)) {
+        push @{$relRec->author}, parse_author($author);
+    }
+    remove_dupe_authors($relRec);
+
+    my $url = $tree->findvalue('//*[@rel="shortlink"]/@href')
+        // $tree->findvalue('//*[@rel="canonical"]/@href');
+    if (test($url)) {
+        $relRec->URL(decode_entities($url));
+    }
+
+    return $relRec;
+}
+
+my $relRec = RefRec->new;
+if (defined $tree) {
+    $relRec = processRelAttribute($tree);
+}
+
+
 sub gather_property {
     my ($property, @records) = @_;
     $property =~ y/-/_/;
@@ -1209,7 +1233,7 @@ $entry{'author'} = choose(
     gather_property(
         'author',
         $dcRec, $htmlMetaCitationRec, @mdRecs, @schemaOrgJsonLd, $ogRec,
-        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec, $relRec));
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
     gather_property(
@@ -1279,7 +1303,7 @@ $entry{'URL'} = choose(
         'URL',
         @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec,
-        $dcRec), $ARGV[0]);
+        $dcRec, $relRec), $ARGV[0]);
 
 # Remove undef values from entry.
 while (my ($key, $val) = each %entry) {
