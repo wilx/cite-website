@@ -1168,11 +1168,6 @@ sub processHtmlHeaderMeta ($html_headers) {
                 choose($html_headers->header('X-Meta-Description'))));
     }
 
-    my $url = $tree->findvalue('//head/link[@rel="canonical"]/@href');
-    if (test($url)) {
-        $htmlHeaderRec->URL(decode_entities($url));
-    }
-
     return $htmlHeaderRec;
 }
 
@@ -1185,14 +1180,15 @@ if (defined $html_headers) {
 sub processRelAttribute ($tree) {
     my $relRec = RefRec->new;
 
-    my $author = $tree->findvalue('//*[@rel="author"]/text()');
-    if (test($author)) {
-        push @{$relRec->author}, parse_author($author);
+    my @authors = $tree->findvalues('//*[@rel="author"]/text()');
+    #print STDERR "author from rel=\"author\": ", Dumper(\@authors), "\n";
+    if (test(\@authors)) {
+        push @{$relRec->author}, map { parse_author($_) } @authors;
     }
     remove_dupe_authors($relRec);
 
-    my $url = $tree->findvalue('//*[@rel="shortlink"]/@href')
-        // $tree->findvalue('//*[@rel="canonical"]/@href');
+    my $url = choose($tree->findvalues('//head/link[@rel="shortlink"]/@href'),
+                     $tree->findvalues('//head/link[@rel="canonical"]/@href'));
     if (test($url)) {
         $relRec->URL(decode_entities($url));
     }
