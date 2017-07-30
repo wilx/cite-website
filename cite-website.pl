@@ -804,13 +804,11 @@ sub processParselyPage ($parsely_page_content) {
     }
 
     if ((ref $parsely_page_content->{'tags'} // '') eq 'ARRAY') {
-        foreach my $tag_str (@{$parsely_page_content->{'tags'}}) {
-            push @{$parselyPageRec->keyword}, $tag_str;
-        }
+        $parselyPageRec->keyword((join ", ", @{$parsely_page_content->{'tags'}}));
     }
     else {
         my $tag_str = $parsely_page_content->{'tags'};
-        push @{$parselyPageRec->keyword}, $tag_str;
+        $parselyPageRec->keyword($tag_str);
     }
 
     return $parselyPageRec;
