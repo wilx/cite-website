@@ -84,6 +84,8 @@ STDOUT->binmode(":utf8");
 STDERR->binmode(":utf8");
 
 my $ua = LWP::UserAgent->new(keep_alive => 10);
+$ua->show_progress(1);
+$ua->max_redirect(16);
 push @{ $ua->requests_redirectable }, 'POST';
 $ua->cookie_jar({});
 $ua->timeout(30);
@@ -93,7 +95,7 @@ $ua->agent('Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:54.0) Gecko/20100101 Fire
 my $response = $ua->get($ARGV[0]);
 my $htmldoc;
 if ($response->is_success) {
-    $htmldoc = $response->decoded_content;
+    $htmldoc = $response->decoded_content(raise_error => 1);
 }
 else {
     #print STDERR "resp: ", Dumper($response), "\n";
@@ -661,7 +663,8 @@ sub processSchemaOrg($item) {
                           "VideoObject",
                           "ScholarlyArticle",
                           "BlogPosting",
-                          "WebPage");
+                          "WebPage",
+                          "MediaObject");
 
     my $dpath_query = ('//*/['
                        . prep_schema_org_type_re_condition(@known_entities)
@@ -685,6 +688,22 @@ sub processSchemaOrg($item) {
         try {
             my $date = date_parse(
                 $md_articles[0]{'properties'}{'datePublished'}[0]);
+            $mdRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+    elsif (test($md_articles[0]{'properties'}{'dateCreated'}[0])) {
+        try {
+            my $date = date_parse(
+                $md_articles[0]{'properties'}{'dateCreated'}[0]);
+            $mdRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+    elsif (test($md_articles[0]{'properties'}{'uploadDate'}[0])) {
+        try {
+            my $date = date_parse(
+                $md_articles[0]{'properties'}{'uploadDate'}[0]);
             $mdRec->issued(date_conversion($date));
         }
         catch {};
@@ -714,7 +733,7 @@ sub processSchemaOrg($item) {
     if (test($md_articles[0]{'properties'}{'description'}[0])) {
         $mdRec->abstract(
             trim_multiline_string(
-                $md_articles[0]{'properties'}{'description'}[0]));
+                (join "\n", @{$md_articles[0]{'properties'}{'description'}})));
     }
 
     if (test($md_articles[0]{'properties'}{'keywords'})) {
@@ -1052,15 +1071,18 @@ sub processDublinCoreHtml ($dc) {
         $dcRec->title($title->content);
     }
 
-    if (test($dc->element('Contributor'))) {
-        for my $author ($dc->element('Contributor')) {
-            push @{$dcRec->author}, parse_author($author->content);
-        }
-    } elsif (test($dc->element('Creator'))) {
+    if (test($dc->element('Creator'))) {
         for my $author ($dc->element('Creator')) {
             push @{$dcRec->author}, parse_author($author->content);
         }
     }
+
+    if (test($dc->element('Contributor'))) {
+        for my $author ($dc->element('Contributor')) {
+            push @{$dcRec->author}, parse_author($author->content);
+        }
+    }
+
     remove_dupe_authors($dcRec);
 
     my $date;
@@ -1160,10 +1182,11 @@ sub processHtmlHeaderMeta ($html_headers) {
         $htmlHeaderRec->keyword($html_meta_keywords);
     }
 
-    if (test($html_headers->header('X-Meta-Description'))) {
+    my $html_meta_description = $html_headers->header('X-Meta-Description');
+    if (test($html_meta_description)) {
         $htmlHeaderRec->abstract(
             trim_multiline_string(
-                choose($html_headers->header('X-Meta-Description'))));
+                choose($html_meta_description)));
     }
 
     return $htmlHeaderRec;
