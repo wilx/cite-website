@@ -154,7 +154,8 @@ try {
         try {
             my $schema_org_ld_json = JSON::decode_json(encode("UTF-8", $ld_json));
             #print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
-            if (test($schema_org_ld_json->{'@context'})
+            if (test($schema_org_ld_json)
+                && test($schema_org_ld_json->{'@context'})
                 && $schema_org_ld_json->{'@context'} =~ m,^https?://schema\.org/?$,i
                 && test($schema_org_ld_json->{'@type'})) {
 
