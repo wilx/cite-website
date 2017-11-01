@@ -120,7 +120,8 @@ if (test($og)) {
 
 my ($microdata, $items);
 try {
-    $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0]);
+    $microdata = HTML::Microdata->extract($htmldoc, base => $ARGV[0],
+                                          libxml => 0);
     $items = $microdata->items;
 }
 catch {};
@@ -203,14 +204,15 @@ try {
 
 sub test {
     my $x = $_[0];
-    return defined ($x)
-        && ((ref $x ne ''
-             && ((reftype($x) eq 'ARRAY'
-                  && scalar @$x)
-                 || (reftype($x) eq 'HASH'
-                     && scalar keys %$x)))
-            || (ref($x) eq ''
-                && length($x) != 0));
+    return (defined ($x)
+            && ((ref $x ne ''
+                 && ((reftype($x) eq 'ARRAY'
+                      && scalar @$x)
+                     || (reftype($x) eq 'HASH'
+                         && scalar keys %$x)))
+                || (ref($x) eq ''
+                    && length($x) != 0)))
+        ? 1 : undef;
 }
 
 sub choose {
@@ -628,6 +630,12 @@ sub processSchemaOrg($item) {
     }
 
     my @md_authors = dpath('//author/*')->match($item);
+    if (!test(\@md_authors)) {
+        # No actual authors have been found. Look for any Person entities.
+        @md_authors = dpath('//*['
+                            . prep_schema_org_type_re_condition("Person")
+                            . "]/..")->match($item);
+    }
     #print STDERR "microdata authors:\n", Dumper(@md_authors), "\n";
 
     if (test(\@md_authors)) {
@@ -679,7 +687,7 @@ sub processSchemaOrg($item) {
             (join ", ", @types), "\n";
     }
     else {
-        print STDERR "We did not find any known to us schema.org entity.\n";
+        print STDERR "We did not find any known to us schema.org entity for content.\n";
         return $mdRec;
     }
 
@@ -718,7 +726,14 @@ sub processSchemaOrg($item) {
     if (test(\@publisher)) {
         $mdRec->publisher((join ", ", $publisher[0][0]));
     } elsif (test($md_articles[0]{'properties'}{'publisher'}[0])) {
-        $mdRec->publisher($md_articles[0]{'properties'}{'publisher'}[0]);
+        my $publisher = $md_articles[0]{'properties'}{'publisher'}[0];
+        if (reftype($publisher) eq '') {
+            $mdRec->publisher($publisher);
+        }
+        else {
+            print STDERR "Publisher is in unrecognized data structure: ",
+                Dumper($publisher), "\n";
+        }
     }
 
     my $title = $md_articles[0]{'properties'}{'headline'}[0]
@@ -876,7 +891,7 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
     my $authors = choose($schema_org_ld_json->{'author'},
                          $schema_org_ld_json->{'creator'});
     if (test($authors)) {
-        if (reftype($authors) eq 'HASH') {
+        if ((reftype($authors) // '') eq 'HASH') {
             $authors = $authors->{'name'};
             for my $author_str (scalar_to_array($authors)) {
                 push @{$schemaOrgJsonLd->author}, parse_author($author_str);
