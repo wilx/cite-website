@@ -64,6 +64,8 @@ use HTML::HeadParser;
 use URI;
 use RDF::Query;
 use YAML qw();
+local $YAML::Numify= 1;
+use YAML::Node;
 use JSON qw();
 use DateTime::Format::ISO8601;
 use DateTime::Format::W3CDTF;
@@ -1343,5 +1345,33 @@ while (my ($key, $val) = each %entry) {
     delete $entry{$key} if not test($val);
 }
 
+# Print keys in this order.
+my @keys_order =
+    qw(
+    title
+    type
+    author
+    issued
+    accessed
+    container-title
+    collection-title
+    volume
+    issue
+    page
+    publisher
+    publisher-place
+    keyword
+    ISBN
+    ISSN
+    DOI
+    URL
+    abstract
+    );
+# Remove missing keys from the order.
+@keys_order = grep { exists $entry{$_} } @keys_order;
+# Set the order.
+my $ref_entry = \%entry;
+YAML::Bless($ref_entry)->keys(\@keys_order);
+
 #print STDERR "Dump: ", Dumper(\%entry), "\n";
-print "\n", YAML::Dump([\%entry]), "\n...\n";
+print "\n", YAML::Dump([$ref_entry]), "\n...\n";
