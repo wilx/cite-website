@@ -971,9 +971,12 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
 
     my $journal = $html_headers->header('X-Meta-Citation-Journal-Title');
     if (test($journal)) {
-        #print STDERR "journal title: ", $journal, "\n";
         $htmlMetaCitationRec->container_title(trim(decode_entities($journal)));
-        #print STDERR "journal title after: ", $htmlMetaCitationRec->container_title, "\n";
+    }
+
+    my $publisher = $html_headers->header('X-Meta-Citation-Publisher');
+    if (test($publisher)) {
+        $htmlMetaCitationRec->publisher(trim(decode_entities($publisher)));
     }
 
     my $volume = $html_headers->header('X-Meta-Citation-Volume');
@@ -1290,8 +1293,8 @@ $entry{'collection-title'} = choose(
 $entry{'publisher'} = choose(
     gather_property(
         'publisher',
-        $dcRec, @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
-        $htmlMetaBepressCitationRec, $htmlHeaderRec));
+        $dcRec, @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
 $entry{'publisher-place'} = choose(
     gather_property(
         'publisher-place',
