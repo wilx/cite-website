@@ -135,7 +135,9 @@ if (test($items)) {
 # HTML as tree parsing.
 
 my $tree = HTML::TreeBuilder::XPath->new;
+$tree->ignore_unknown(0);
 $tree->parse($htmldoc);
+$tree->eof;
 
 # Microdata from parsely-page meta tag JSON content.
 
