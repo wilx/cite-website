@@ -278,7 +278,9 @@ sub date_conversion {
 sub parse_author {
     my ($str, $additional_name) = @_;
     $str = decode_entities($str);
-    $additional_name = decode_entities($additional_name);
+    if (test($additional_name)) {
+        $additional_name = decode_entities($additional_name);
+    }
     my @authors = ();
     #print STDERR "Name: ", $str, "\n";
     # Try as if string contains multiple names separated by "and".
