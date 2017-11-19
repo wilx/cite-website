@@ -62,7 +62,6 @@ use HTML::TreeBuilder::XPath;
 use HTML::Entities;
 use HTML::HeadParser;
 use URI;
-use RDF::Query;
 use YAML qw();
 local $YAML::Numify= 1;
 use YAML::Node;
