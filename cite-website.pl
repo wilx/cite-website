@@ -232,6 +232,20 @@ sub choose {
     return;
 }
 
+sub choose_longest {
+    my @values = @_;
+    #print STDERR "choose_longest(", Dumper(\@values), ")\n";
+    @values = grep { test($_) } @values;
+    @values = sort { length($b) <=> length($a) } @values;
+    if (test(\@values)) {
+        return $values[0];
+    }
+    else {
+        #print STDERR "Not choosing any value, returning undef.\n";
+        return;
+    }
+}
+
 sub read_og_array {
     my ($og, $prop) = @_;
     my $prop_value = $og->property($prop);
@@ -1085,6 +1099,55 @@ sub processHtmlHeaderBepressMetaCitation ($html_headers) {
 my $htmlMetaBepressCitationRec = processHtmlHeaderBepressMetaCitation($html_headers);
 
 
+# Parsely meta tags
+
+sub processHtmlHeaderParselyMetaCitation ($html_headers) {
+    my $htmlMetaCitationRec = RefRec->new;
+
+    my $citation_date_str = $html_headers->header('X-Meta-Parsely-Pub-Date');
+    if (test($citation_date_str)) {
+        try {
+            my $date = date_parse($citation_date_str);
+            $htmlMetaCitationRec->issued(date_conversion($date));
+        }
+        catch {};
+    }
+
+    my $citation_title = $html_headers->header('X-Meta-Parsely-Title');
+    if (test($citation_title)) {
+        $htmlMetaCitationRec->title(trim(decode_entities($citation_title)));
+    }
+
+    my @authors = $html_headers->header('X-Meta-Parsely-Author');
+    if (test(\@authors)) {
+        for my $author_str (@authors) {
+            push @{$htmlMetaCitationRec->author}, parse_author($author_str);
+        }
+        remove_dupe_authors($htmlMetaCitationRec);
+    }
+
+    my $url = $html_headers->header('X-Meta-Parsely-Link');
+    if (test($url)) {
+        $htmlMetaCitationRec->URL(trim(decode_entities($url)));
+    }
+
+    my @tags = $html_headers->header('X-Meta-Parsely-Tags');
+    if (test(\@tags)) {
+        my $html_meta_keywords = join ", ", @tags;
+        trim($html_meta_keywords);
+        $html_meta_keywords =~ s/(\s)\s*/$1/g;
+        $htmlMetaCitationRec->keyword($html_meta_keywords);
+    }
+
+    $htmlMetaCitationRec->type('article');
+
+    return $htmlMetaCitationRec;
+}
+
+my $htmlMetaParselyCitationRec = processHtmlHeaderParselyMetaCitation($html_headers);
+#print STDERR "HTML Meta Parsely: ", Dumper($htmlMetaParselyCitationRec), "\n";
+
+
 # DublinCore metadata.
 
 sub processDublinCoreHtml ($dc) {
@@ -1266,7 +1329,7 @@ $entry{'title'} = choose(
     gather_property(
         'title', @mdRecs, $ogRec, $dcRec, $htmlMetaCitationRec,
         @schemaOrgJsonLd, $parselyPageRec, $htmlMetaBepressCitationRec,
-        $htmlHeaderRec));
+        $htmlMetaParselyCitationRec, $htmlHeaderRec));
 $entry{'type'} = choose(
     gather_property(
         'type',
@@ -1276,13 +1339,15 @@ $entry{'author'} = choose(
     gather_property(
         'author',
         $dcRec, $htmlMetaCitationRec, @mdRecs, @schemaOrgJsonLd, $ogRec,
-        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec, $relRec));
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlMetaParselyCitationRec,
+        $htmlHeaderRec, $relRec));
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
     gather_property(
         'issued',
         $dcRec, @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
-        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlMetaParselyCitationRec,
+        $htmlHeaderRec));
 $entry{'container-title'} = choose(
     gather_property(
         'container-title',
@@ -1323,10 +1388,11 @@ $entry{'abstract'} = choose(
         'abstract',
         $dcRec, @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
-$entry{'keyword'} = choose(
+$entry{'keyword'} = choose_longest(
     gather_property(
         'keyword',
-        @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec, $htmlHeaderRec));
+        @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
+        $htmlMetaParselyCitationRec, $htmlHeaderRec));
 $entry{'ISBN'} = choose(
     gather_property(
         'ISBN',
@@ -1345,8 +1411,8 @@ $entry{'URL'} = choose(
     gather_property(
         'URL',
         @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
-        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec,
-        $dcRec, $relRec), $ARGV[0]);
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlMetaParselyCitationRec,
+        $htmlHeaderRec, $dcRec, $relRec), $ARGV[0]);
 
 # Remove undef values from entry.
 while (my ($key, $val) = each %entry) {
