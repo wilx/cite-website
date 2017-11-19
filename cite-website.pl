@@ -462,7 +462,7 @@ sub processOpenGraph ($og) {
 
     my $title = $og->property('title');
     if (test($title)) {
-        $ogRec->title(decode_entities($title));
+        $ogRec->title(trim(decode_entities($title)));
     }
 
     my $description = $og->property('description');
