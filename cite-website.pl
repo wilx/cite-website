@@ -1384,11 +1384,12 @@ $entry{'collection-title'} = choose(
         'collection-title',
         $htmlMetaCitationRec,  @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlMetaBepressCitationRec, $htmlHeaderRec));
-$entry{'publisher'} = choose(
+$entry{'publisher'} = choose
+    grep { defined($_) && !m,^(?:https?:|//),i }
     gather_property(
         'publisher',
         $dcRec, @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
-        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec));
+        $parselyPageRec, $htmlMetaBepressCitationRec, $htmlHeaderRec);
 $entry{'publisher-place'} = choose(
     gather_property(
         'publisher-place',
