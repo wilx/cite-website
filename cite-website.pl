@@ -61,6 +61,7 @@ use HTML::DublinCore;
 use HTML::TreeBuilder::XPath;
 use HTML::Entities;
 use HTML::HeadParser;
+use Data::Microformat::hCard;
 use URI;
 use YAML qw();
 local $YAML::Numify= 1;
@@ -137,6 +138,12 @@ my $tree = HTML::TreeBuilder::XPath->new;
 $tree->ignore_unknown(0);
 $tree->parse($htmldoc);
 $tree->eof;
+
+# hCard metadata
+
+my @hcards = Data::Microformat::hCard->parse($htmldoc);
+#print STDERR "hCard: ", Dumper(\@hcards), "\n";
+print STDERR "hCard: ", Dumper($hcards[0]), "\n";
 
 # Microdata from parsely-page meta tag JSON content.
 
@@ -1314,6 +1321,23 @@ if (defined $tree) {
 }
 
 
+sub processhCard ($hcard, $rec) {
+    my $author = $hcard->fn;
+    if (test($author)) {
+        push @{$rec->author}, parse_author($author);
+    }
+}
+
+my $hCardRec = RefRec->new;
+for my $hcard (@hcards) {
+    if (defined $hcard) {
+        processhCard($hcard, $hCardRec);
+    }
+    last;
+}
+remove_dupe_authors($hCardRec);
+
+
 sub gather_property {
     my ($property, @records) = @_;
     $property =~ y/-/_/;
@@ -1342,7 +1366,7 @@ $entry{'author'} = choose(
         'author',
         $dcRec, $htmlMetaCitationRec, @mdRecs, @schemaOrgJsonLd, $ogRec,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlMetaParselyCitationRec,
-        $htmlHeaderRec, $relRec));
+        $htmlHeaderRec, $relRec, $hCardRec));
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
     gather_property(
