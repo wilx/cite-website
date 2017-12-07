@@ -310,7 +310,7 @@ sub parse_author {
         # Sometimes the author metadata contains a link to Facebook page or
         # similar links and hides actual author name in other metadata
         # sources. We want to avoid this.
-        next if $text =~ /^https?:/;
+        next if $text =~ /^https?:/i;
         my $author = {};
         # Family name (comma) Given name
         if ($text =~ /^\s*([^,]+)\s*,\s*(.*\S)\s*$/) {
