@@ -143,7 +143,7 @@ $tree->eof;
 
 my @hcards = Data::Microformat::hCard->parse($htmldoc);
 #print STDERR "hCard: ", Dumper(\@hcards), "\n";
-print STDERR "hCard: ", Dumper($hcards[0]), "\n";
+#print STDERR "hCard: ", Dumper($hcards[0]), "\n";
 
 # Microdata from parsely-page meta tag JSON content.
 
@@ -708,7 +708,7 @@ sub processSchemaOrg($item) {
                        . ']/..');
     #print STDERR "dpath query: ", $dpath_query, "\n";
     my @md_articles = dpath($dpath_query)->match($item);
-    print STDERR "md_articles: ", Dumper(\@md_articles), "\n";
+    #print STDERR "md_articles: ", Dumper(\@md_articles), "\n";
     if (test(\@md_articles)) {
         my @types = map { $_->{'type'} } @md_articles;
         print STDERR "It looks like we have instance(s) of ",
