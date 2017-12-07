@@ -1435,6 +1435,7 @@ $entry{'DOI'} = choose(
         $dcRec, @mdRecs, $htmlMetaCitationRec, $ogRec, @schemaOrgJsonLd,
         $parselyPageRec, $htmlHeaderRec));
 $entry{'URL'} = choose(
+    grep { defined($_) && m,^https?:,i }
     gather_property(
         'URL',
         @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
