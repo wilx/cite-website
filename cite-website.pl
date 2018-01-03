@@ -428,38 +428,27 @@ sub date_parse {
         try {
             my $locale = DateTime::Locale->load($lang);
             #print STDERR "locale: ", Dumper($locale), "\n";
-
-            try {
-                my $date = date_parse_using_cldr($locale, 'date_format_full', $str);
-                print STDERR "Date ", $str, " looks like full date in ", $locale->name,
-                    " locale\n";
-                return $date;
+            my @date_formats = (
+                'datetime_format_full',
+                'date_format_full',
+                'datetime_format_long',
+                'date_format_long',
+                'datetime_format_medium',
+                'date_format_medium',
+                'datetime_format_short',
+                'date_format_short');
+            for my $format (@date_formats) {
+                try {
+                    my $date = date_parse_using_cldr($locale, $format, $str);
+                    $format =~ /(full|long|medium|short)$/;
+                    my $date_length = $1;
+                    print STDERR "Date ", $str, " looks like ", $date_length,
+                        " date ", ($format =~ /time/ ? "and time" : ""),
+                        " in ", $locale->name, " locale\n";
+                    return $date;
+                }
+                catch {};
             }
-            catch {};
-
-            try {
-                my $date = date_parse_using_cldr($locale, 'date_format_long', $str);
-                print STDERR "Date ", $str, " looks like long date in ", $locale->name,
-                    " locale\n";
-                return $date;
-            }
-            catch {};
-
-            try {
-                my $date = date_parse_using_cldr($locale, 'date_format_medium', $str);
-                print STDERR "Date ", $str, " looks like medium date in ", $locale->name,
-                    " locale\n";
-                return $date;
-            }
-            catch {};
-
-            try {
-                my $date = date_parse_using_cldr($locale, 'date_format_short', $str);
-                print STDERR "Date ", $str, " looks like short date in ", $locale->name,
-                    " locale\n";
-                return $date;
-            }
-            catch {};
         }
         catch {
             print STDERR "Failed to load \"", $lang, "\" locale\n";
