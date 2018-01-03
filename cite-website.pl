@@ -169,11 +169,19 @@ try {
             my $schema_org_ld_json = JSON::decode_json(encode("UTF-8", $ld_json));
             #print STDERR "schema.org JSON+LD data:\n", Dumper($schema_org_ld_json), "\n";
             if (test($schema_org_ld_json)
+                && reftype($schema_org_ld_json) eq 'HASH'
                 && test($schema_org_ld_json->{'@context'})
                 && $schema_org_ld_json->{'@context'} =~ m,^https?://schema\.org/?$,i
                 && test($schema_org_ld_json->{'@type'})) {
 
                 push @schema_org_ld_json, $schema_org_ld_json;
+                print STDERR "It looks like we have some schema.org data in JSON+LD.\n";
+            }
+            elsif (test($schema_org_ld_json)
+                   && reftype($schema_org_ld_json) eq 'ARRAY') {
+                foreach my $object (@$schema_org_ld_json) {
+                    push @schema_org_ld_json, $object;
+                }
                 print STDERR "It looks like we have some schema.org data in JSON+LD.\n";
             }
         }
