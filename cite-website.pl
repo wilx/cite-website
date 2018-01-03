@@ -54,6 +54,9 @@ use feature qw(signatures);
 no warnings qw(experimental::signatures);
 
 use Data::Dumper;
+local $Data::Dumper::Indent = 1;
+local $Data::Dumper::Terse = 1;
+local $Data::Dumper::Sortkeys = 1;
 use LWP::Simple qw();
 use Data::OpenGraph;
 use HTML::Microdata;
