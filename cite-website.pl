@@ -942,6 +942,11 @@ sub processSchemaOrgJsonLd ($schema_org_ld_json) {
         }
     }
 
+    my @publisher = dpath('/publisher/name')->match($schema_org_ld_json);
+    if (test($publisher[0])) {
+        $schemaOrgJsonLd->publisher($publisher[0]);
+    }
+
     #print STDERR "Parsed Schema.org JSON+LD record: ", Dumper($schemaOrgJsonLd), "\n";
 
     return $schemaOrgJsonLd;
