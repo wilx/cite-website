@@ -443,7 +443,7 @@ sub date_parse {
                     $format =~ /(full|long|medium|short)$/;
                     my $date_length = $1;
                     print STDERR "Date ", $str, " looks like ", $date_length,
-                        " date ", ($format =~ /time/ ? "and time" : ""),
+                        " date", ($format =~ /time/ ? " and time" : ""),
                         " in ", $locale->name, " locale\n";
                     return $date;
                 }
