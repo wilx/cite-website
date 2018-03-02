@@ -331,7 +331,7 @@ sub parse_author {
             $author->{'family'} = $family;
             $author->{'given'} = $given;
         }
-        elsif ($text =~ /^\s*((?:\S+\s+|\S+)+)\s+(\S+)\s*$/) {
+        elsif ($text =~ /^\s*((?:\S+|\s+\S+)+)\s+(\S+)\s*$/) {
             #print STDERR "long name\n";
             my $family = $2;
             my $given = $1;
