@@ -316,7 +316,9 @@ sub parse_author {
     my @authors = ();
     #print STDERR "Name: ", $str, "\n";
     # Try as if string contains multiple names separated by "and" and/or ";".
-    my @names = map { split /,?\s*and\s+/ } map { split /\s*;\s*/ } $str;
+    my @names = map { split /,?\s*(?:and|&)\s+/ } map { split /\s*;\s*/ } $str;
+    # Avoid authors that look like just email. Keep Twitter-like handles.
+    @names = grep { ! /.@./; } @names;
     foreach my $text (@names) {
         # Sometimes the author metadata contains a link to Facebook page or
         # similar links and hides actual author name in other metadata
