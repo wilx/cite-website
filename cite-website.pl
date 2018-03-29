@@ -1244,8 +1244,10 @@ sub processHtmlHeaderMeta ($html_headers) {
     }
 
     if (test($html_headers->header('X-Meta-Author'))) {
-        my $author = $html_headers->header('X-Meta-Author');
-        push @{$htmlHeaderRec->author}, parse_author($author);
+        my @authors = $html_headers->header('X-Meta-Author');
+        foreach my $author (@authors) {
+            push @{$htmlHeaderRec->author}, parse_author($author);
+        }
     }
     remove_dupe_authors($htmlHeaderRec);
 
