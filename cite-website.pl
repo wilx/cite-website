@@ -994,8 +994,14 @@ sub processHtmlHeaderMetaCitation ($html_headers) {
         for my $author_str (@authors) {
             push @{$htmlMetaCitationRec->author}, parse_author($author_str);
         }
-        remove_dupe_authors($htmlMetaCitationRec);
     }
+    @authors = $html_headers->header('X-Meta-Citation-Authors');
+    if (test(\@authors)) {
+        for my $author_str (@authors) {
+            push @{$htmlMetaCitationRec->author}, parse_author($author_str);
+        }
+    }
+    remove_dupe_authors($htmlMetaCitationRec);
 
     my $pdf_url = $html_headers->header('X-Meta-Citation-Pdf-Url');
     if (test($pdf_url)) {
