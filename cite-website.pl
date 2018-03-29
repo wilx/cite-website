@@ -1421,6 +1421,7 @@ $entry{'abstract'} = choose(
         $dcRec, @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
         $htmlHeaderRec));
 $entry{'keyword'} = choose_longest(
+    map { my $x = $_ ; $x =~ s/[,;]+\s*$// if defined $x; $x; }
     gather_property(
         'keyword',
         @mdRecs, $ogRec, @schemaOrgJsonLd, $parselyPageRec,
