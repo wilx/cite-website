@@ -1353,6 +1353,63 @@ for my $hcard (@hcards) {
 remove_dupe_authors($hCardRec);
 
 
+sub processWordPress ($tree) {
+    my $rec = RefRec->new;
+
+    my $entryHeaderXpath
+        = '//article[contains(@class, "post")]'
+        . '//header[contains(@class, "entry-header")]';
+
+    my $entryMetaXpath
+        = $entryHeaderXpath
+        . '//*[contains(@class, "entry-meta")]';
+
+    my $titleXpath
+        = $entryHeaderXpath
+        . '//*[contains(@class, "entry-title")]/text()';
+    my $title = $tree->findvalue($titleXpath);
+    #print STDERR "WP title: ", $title, "\n";
+    if (test($title)) {
+        $rec->title($title);
+    }
+
+    my $dateTimeBaseXpath
+        = $entryMetaXpath
+        . '//*[contains(@class, "entry-date")]';
+    my @issued = ($tree->findvalues($dateTimeBaseXpath . '/@datetime'),
+                  $tree->findvalues($dateTimeBaseXpath . '/text()'));
+    #print STDERR "WP date: ", Dumper(\@published), "\n";
+    for my $date (@issued) {
+        #print STDERR "WP date: ", $date, "\n";
+        next if !test($date);
+        my $parsedDate = date_parse($date);
+        if (test($parsedDate)) {
+            $rec->issued(date_conversion($parsedDate));
+            last;
+        }
+    }
+
+    my $authorXpath
+        = $entryMetaXpath
+        . '//*[contains(@class, "author")]'
+        . '/descendant-or-self::*[contains(@class, "vcard")]';
+    my $authorStr = $tree->findvalue($authorXpath);
+    #print STDERR "WP author: ", $authorStr, "\n";
+    if (test($authorStr)) {
+        push @{$rec->author}, parse_author($authorStr);
+    }
+
+    return $rec;
+}
+
+my $wordpressRec = RefRec->new;
+if (defined $tree) {
+    $wordpressRec = processWordPress($tree);
+}
+remove_dupe_authors($wordpressRec);
+#print STDERR "WordPress metadata: ", Dumper($wordpressRec), "\n";
+
+
 sub gather_property {
     my ($property, @records) = @_;
     $property =~ y/-/_/;
@@ -1370,7 +1427,7 @@ $entry{'title'} = choose(
     gather_property(
         'title', @mdRecs, $ogRec, $dcRec, $htmlMetaCitationRec,
         @schemaOrgJsonLd, $parselyPageRec, $htmlMetaBepressCitationRec,
-        $htmlMetaParselyCitationRec, $htmlHeaderRec));
+        $htmlMetaParselyCitationRec, $wordpressRec, $htmlHeaderRec));
 $entry{'type'} = choose(
     gather_property(
         'type',
@@ -1381,14 +1438,14 @@ $entry{'author'} = choose(
         'author',
         $dcRec, $htmlMetaCitationRec, @mdRecs, @schemaOrgJsonLd, $ogRec,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlMetaParselyCitationRec,
-        $htmlHeaderRec, $relRec, $hCardRec));
+        $htmlHeaderRec, $relRec, $hCardRec, $wordpressRec));
 $entry{'accessed'} = date_conversion(DateTime->today());
 $entry{'issued'} = choose(
     gather_property(
         'issued',
         $dcRec, @mdRecs, $ogRec, $htmlMetaCitationRec, @schemaOrgJsonLd,
         $parselyPageRec, $htmlMetaBepressCitationRec, $htmlMetaParselyCitationRec,
-        $htmlHeaderRec));
+        $wordpressRec, $htmlHeaderRec));
 $entry{'container-title'} = choose(
     gather_property(
         'container-title',
