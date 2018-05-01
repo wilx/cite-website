@@ -1357,8 +1357,8 @@ sub processWordPress ($tree) {
     my $rec = RefRec->new;
 
     my $entryHeaderXpath
-        = '//article[contains(@class, "post")]'
-        . '//header[contains(@class, "entry-header")]';
+        = '//*[contains(@class, "post")]'
+        . '//*[contains(@class, "entry-header")]';
 
     my $entryMetaXpath
         = $entryHeaderXpath
