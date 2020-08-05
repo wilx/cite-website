@@ -43,6 +43,10 @@ __PACKAGE__->meta->make_immutable;
 
 package main;
 
+BEGIN {
+    #$HTML::TreeBuilder::DEBUG = 1;
+}
+
 use v5.20;
 use strict;
 use warnings;
@@ -83,8 +87,8 @@ use Data::DPath 'dpath';
 use Encode;
 
 use Carp;
-local $SIG{__WARN__} = sub { print( Carp::longmess (shift) ); };
-#local $SIG{__DIE__} = sub { print( Carp::longmess (shift) ); };
+local $SIG{__WARN__} = sub { print STDERR ( Carp::longmess (shift) ); };
+local $SIG{__DIE__} = sub { print STDERR ( Carp::longmess (shift) ); };
 
 STDOUT->binmode(":utf8");
 STDERR->binmode(":utf8");
@@ -120,6 +124,7 @@ my $og = Data::OpenGraph->parse_string($htmldoc);
 #print STDERR "og:\n", Dumper($og->{properties}), "\n";
 if (test($og)) {
     print STDERR "It looks like we have some Open Graph data.\n";
+    #print STDERR "og: ", Dumper($og), "\n";
 }
 
 # Microdata parsing.
@@ -357,6 +362,7 @@ sub parse_author {
         push @authors, $author;
     }
 
+    #print STDERR "parsed authors: ", Dumper(\@authors), "\n";
     return @authors;
 }
 
