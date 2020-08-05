@@ -65,6 +65,7 @@ use HTML::TreeBuilder::XPath;
 use HTML::Entities;
 use HTML::HeadParser;
 use Data::Microformat::hCard;
+use Data::Microformat::hFeed::hEntry;
 use URI;
 use YAML qw();
 local $YAML::Numify= 1;
@@ -147,6 +148,9 @@ $tree->eof;
 my @hcards = Data::Microformat::hCard->parse($htmldoc);
 #print STDERR "hCard: ", Dumper(\@hcards), "\n";
 #print STDERR "hCard: ", Dumper($hcards[0]), "\n";
+
+my @hentries = Data::Microformat::hFeed::hEntry->parse($htmldoc);
+print STDERR "hEntry: ", Dumper($hentries[0]), "\n";
 
 # Microdata from parsely-page meta tag JSON content.
 
@@ -1338,19 +1342,24 @@ if (defined $tree) {
 
 sub processhCard ($hcard, $rec) {
     my $author = $hcard->fn;
+    print STDERR "hCard author: ", Dumper($author), "\n";
     if (test($author)) {
         push @{$rec->author}, parse_author($author);
     }
 }
 
 my $hCardRec = RefRec->new;
+#print STDERR "hCard hcards: ", Dumper(\@hcards), "\n";
 for my $hcard (@hcards) {
+    next if (!defined($hcard) || !defined($hcard->fn) || $hcard->fn =~ /^HTML::Element/);
+    #print STDERR "hCard card: ", Dumper($hcard), "\n";
     if (defined $hcard) {
         processhCard($hcard, $hCardRec);
     }
     last;
 }
 remove_dupe_authors($hCardRec);
+#print STDERR "hCard metadata: ", Dumper($hCardRec), "\n";
 
 
 sub processWordPress ($tree) {
