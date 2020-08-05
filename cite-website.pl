@@ -49,10 +49,10 @@ use warnings;
 use criticism;
 ## no critic (ProhibitSubroutinePrototypes)
 use experimental 'switch';
-use syntax 'try';
 use feature qw(signatures);
 no warnings qw(experimental::signatures);
 
+use Syntax::Keyword::Try;
 use Data::Dumper;
 local $Data::Dumper::Indent = 1;
 local $Data::Dumper::Terse = 1;
